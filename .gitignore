@@ -11,6 +11,9 @@ eval/deepvoxels
 eval/nerf_synthetic
 eval/ref
 eval/vis_ray_distribution
+eval/nerf_llff_data
+eval/shiny
 tools/data_verify
 /eval/llff/
 /eval/llff_finetune/
+/data/
