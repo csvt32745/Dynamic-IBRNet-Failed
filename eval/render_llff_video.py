@@ -34,7 +34,7 @@ class LLFFRenderDataset(Dataset):
                  scenes='fern',  # 'fern', 'flower', 'fortress', 'horns', 'leaves', 'orchids', 'room', 'trex'
                  **kwargs):
 
-        self.folder_path = os.path.join(args.rootdir, 'data/nerf_llff_data/')
+        self.folder_path = os.path.join(args.rootdir, 'data/')
         self.num_source_views = args.num_source_views
 
         print("loading {} for rendering".format(scenes))
@@ -128,6 +128,9 @@ if __name__ == '__main__':
     parser = config_parser()
     args = parser.parse_args()
     args.distributed = False
+
+    # print(args.num_source_views)
+    # assert False
 
     # Create ibrnet model
     model = IBRNetModel(args, load_scheduler=False, load_opt=False)

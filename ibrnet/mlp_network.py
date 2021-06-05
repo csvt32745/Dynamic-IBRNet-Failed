@@ -142,7 +142,7 @@ def weights_init(m):
             nn.init.zeros_(m.bias.data)
 
 
-@torch.jit.script
+# @torch.jit.script
 def fused_mean_variance(x, weight):
     mean = torch.sum(x*weight, dim=2, keepdim=True)
     var = torch.sum(weight * (x - mean)**2, dim=2, keepdim=True)

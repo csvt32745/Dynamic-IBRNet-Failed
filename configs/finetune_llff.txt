@@ -10,9 +10,9 @@ no_load_scheduler = True
 n_iters = 30000
 
 ## dataset
-train_dataset = llff_test
+train_dataset = llff_test # do not modify
 train_scenes = shiny/cake
-eval_dataset = llff_test
+eval_dataset = llff_test # do not modify
 eval_scenes = shiny/cake
 
 ### TRAINING

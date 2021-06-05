@@ -17,3 +17,5 @@ tools/data_verify
 /eval/llff/
 /eval/llff_finetune/
 /data/
+.vscode/
+pretrained/
