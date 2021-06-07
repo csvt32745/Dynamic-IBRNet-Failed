@@ -15,7 +15,7 @@
 
 import torch
 import os
-from ibrnet.mlp_network import IBRNet
+from ibrnet.mlp_network import IBRNet, DeformationModel
 from ibrnet.feature_network import ResUNet
 
 
@@ -48,6 +48,9 @@ class IBRNetModel(object):
                                    fine_out_ch=self.args.fine_feat_dim,
                                    coarse_only=self.args.coarse_only).cuda()
 
+        # TODO: create DM, input args
+        self.deform_net = DeformationModel()
+
         # optimizer and learning rate scheduler
         learnable_params = list(self.net_coarse.parameters())
         learnable_params += list(self.feature_net.parameters())
@@ -58,7 +61,9 @@ class IBRNetModel(object):
             self.optimizer = torch.optim.Adam([
                 {'params': self.net_coarse.parameters()},
                 {'params': self.net_fine.parameters()},
-                {'params': self.feature_net.parameters(), 'lr': args.lrate_feature}],
+                {'params': self.feature_net.parameters(), 'lr': args.lrate_feature}
+                # TODO: Optim: DeformationModel.parameters()
+                ],
                 lr=args.lrate_mlp)
         else:
             self.optimizer = torch.optim.Adam([
@@ -98,12 +103,14 @@ class IBRNetModel(object):
     def switch_to_eval(self):
         self.net_coarse.eval()
         self.feature_net.eval()
+        # TODO: DM.eval()
         if self.net_fine is not None:
             self.net_fine.eval()
 
     def switch_to_train(self):
         self.net_coarse.train()
         self.feature_net.train()
+        # TODO: DM.train()
         if self.net_fine is not None:
             self.net_fine.train()
 
@@ -118,6 +125,8 @@ class IBRNetModel(object):
             to_save['net_fine'] = de_parallel(self.net_fine).state_dict()
 
         torch.save(to_save, filename)
+        
+        # TODO: Save DM independently
 
     def load_model(self, filename, load_opt=True, load_scheduler=True):
         if self.args.distributed:
@@ -135,6 +144,8 @@ class IBRNetModel(object):
 
         if self.net_fine is not None and 'net_fine' in to_load.keys():
             self.net_fine.load_state_dict(to_load['net_fine'])
+        
+        # TODO: Load DM independently
 
     def load_from_ckpt(self, out_folder,
                        load_opt=True,

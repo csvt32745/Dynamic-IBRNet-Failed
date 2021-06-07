@@ -53,6 +53,7 @@ class LLFFRenderDataset(Dataset):
 
         for i, scene in enumerate(scenes):
             scene_path = os.path.join(self.folder_path, scene)
+            # FIXME: time_index
             _, poses, bds, render_poses, i_test, rgb_files = load_llff_data(scene_path, load_imgs=False, factor=4)
             near_depth = np.min(bds)
             far_depth = np.max(bds)
@@ -121,6 +122,7 @@ class LLFFRenderDataset(Dataset):
                 'src_rgbs': torch.from_numpy(src_rgbs[..., :3]),
                 'src_cameras': torch.from_numpy(src_cameras),
                 'depth_range': depth_range
+                # TODO: return time_index, src_times
                 }
 
 

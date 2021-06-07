@@ -140,6 +140,8 @@ def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
     imgfiles = [os.path.join(imgdir, f) for f in sorted(os.listdir(imgdir)) if
                 f.endswith('JPG') or f.endswith('jpg') or f.endswith('png')]
 
+    # TODO: extract time index
+    
     if poses.shape[-1] != len(imgfiles):
         imagesfile = os.path.join(basedir, 'sparse/0/images.bin')
         imdata = read_images_binary(imagesfile)
@@ -165,6 +167,7 @@ def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
         imgs = np.stack(imgs, -1)
         print('Loaded image data', imgs.shape, poses[:, -1, 0])
 
+    # FIXME: return time index
     return poses, bds, imgs, imgfiles
 
 
@@ -198,6 +201,7 @@ def poses_avg(poses):
 
 
 def render_path_spiral(c2w, up, rads, focal, zdelta, zrate, rots, N):
+    # TODO: render_path_spiral changable c2w
     render_poses = []
     rads = np.array(list(rads) + [1.])
     hwf = c2w[:, 4:5]
@@ -227,6 +231,7 @@ def recenter_poses(poses):
 
 
 def spherify_poses(poses, bds):
+    # TRACE: spherify_poses
     p34_to_44 = lambda p: np.concatenate([p, np.tile(np.reshape(np.eye(4)[-1, :], [1, 1, 4]), [p.shape[0], 1, 1])], 1)
 
     rays_d = poses[:, :3, 2:3]

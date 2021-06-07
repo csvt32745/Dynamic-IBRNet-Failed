@@ -7,7 +7,7 @@ distributed = False
 
 ## dataset
 eval_dataset = shiny
-eval_scenes = shiny/cake
+eval_scenes = shiny/room
 
 ### TESTING
 chunk_size = 4096

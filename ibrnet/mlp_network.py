@@ -19,6 +19,21 @@ import torch.nn.functional as F
 torch._C._jit_set_profiling_executor(False)
 torch._C._jit_set_profiling_mode(False)
 
+class DeformationModel(nn.Module):
+    # TODO: DeformationModel
+    # Map (x, y, z, t0, t1) to (x', y', z', ...)
+    
+    def __init__(self, ch_in=5, ch_out=3, n_size=64, n_layer=3):
+        super().__init__()
+        self.layers = [
+            nn.Linear(ch_in, n_size)
+        ]
+        self.layers += [ nn.Linear(n_size, n_size) for i in range(n_layer) ]
+        self.layers.append(nn.Linear(n_size, ch_out))
+        self.layers = nn.Sequential(*self.layers)
+    
+    def forward(self, x):
+        return self.layers(x)
 
 class ScaledDotProductAttention(nn.Module):
     ''' Scaled Dot-Product Attention '''

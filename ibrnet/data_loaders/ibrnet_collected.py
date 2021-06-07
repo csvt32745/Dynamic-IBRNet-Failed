@@ -50,6 +50,7 @@ class IBRNetCollectedDataset(Dataset):
                 factor = 8
             else:
                 factor = 2
+
             _, poses, bds, render_poses, i_test, rgb_files = load_llff_data(scene, load_imgs=False, factor=factor)
             near_depth = np.min(bds)
             far_depth = np.max(bds)

@@ -51,6 +51,7 @@ class LLFFTestDataset(Dataset):
         print("loading {} for {}".format(scenes, mode))
         for i, scene in enumerate(scenes):
             scene_path = os.path.join(self.folder_path, scene)
+            # FIXME: time_index
             _, poses, bds, render_poses, i_test, rgb_files = load_llff_data(scene_path, load_imgs=False, factor=4)
             near_depth = np.min(bds)
             far_depth = np.max(bds)
@@ -86,6 +87,7 @@ class LLFFTestDataset(Dataset):
         intrinsics = self.render_intrinsics[idx]
         depth_range = self.render_depth_range[idx]
 
+        # TODO: train_times
         train_set_id = self.render_train_set_ids[idx]
         train_rgb_files = self.train_rgb_files[train_set_id]
         train_poses = self.train_poses[train_set_id]
@@ -121,6 +123,7 @@ class LLFFTestDataset(Dataset):
 
         src_rgbs = []
         src_cameras = []
+        # TODO: src_times = []
         for id in nearest_pose_ids:
             src_rgb = imageio.imread(train_rgb_files[id]).astype(np.float32) / 255.
             train_pose = train_poses[id]
@@ -134,6 +137,8 @@ class LLFFTestDataset(Dataset):
 
         src_rgbs = np.stack(src_rgbs, axis=0)
         src_cameras = np.stack(src_cameras, axis=0)
+        # src_times = np.stack(src_times, axis=0)
+
         if self.mode == 'train' and self.random_crop:
             crop_h = np.random.randint(low=250, high=750)
             crop_h = crop_h + 1 if crop_h % 2 == 1 else crop_h
@@ -150,5 +155,6 @@ class LLFFTestDataset(Dataset):
                 'src_rgbs': torch.from_numpy(src_rgbs[..., :3]),
                 'src_cameras': torch.from_numpy(src_cameras),
                 'depth_range': depth_range,
+                # TODO: return time_index, src_times
                 }
 
