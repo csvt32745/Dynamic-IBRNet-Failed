@@ -44,17 +44,18 @@ class LLFFRenderDataset(Dataset):
         self.render_poses = []
         self.render_train_set_ids = []
         self.render_depth_range = []
+        self.render_time_indices = []
         self.h = []
         self.w = []
 
         self.train_intrinsics = []
         self.train_poses = []
         self.train_rgb_files = []
+        self.train_time_indices = []
 
         for i, scene in enumerate(scenes):
             scene_path = os.path.join(self.folder_path, scene)
-            # FIXME: time_index
-            _, poses, bds, render_poses, i_test, rgb_files = load_llff_data(scene_path, load_imgs=False, factor=4)
+            _, poses, bds, render_poses, i_test, rgb_files, time_indices = load_llff_data(scene_path, load_imgs=False, factor=4)
             near_depth = np.min(bds)
             far_depth = np.max(bds)
             intrinsics, c2w_mats = batch_parse_llff_poses(poses)
@@ -69,13 +70,18 @@ class LLFFRenderDataset(Dataset):
             self.train_intrinsics.append(intrinsics[i_train])
             self.train_poses.append(c2w_mats[i_train])
             self.train_rgb_files.append(np.array(rgb_files)[i_train].tolist())
+            self.train_time_indices.append(np.array(time_indices)[i_train].tolist())
+            
             num_render = len(render_intrinsics)
+            self.render_time_indices.extend(np.array(time_indices).tolist())
             self.render_intrinsics.extend([intrinsics_ for intrinsics_ in render_intrinsics])
             self.render_poses.extend([c2w_mat for c2w_mat in render_c2w_mats])
             self.render_depth_range.extend([[near_depth, far_depth]]*num_render)
             self.render_train_set_ids.extend([i]*num_render)
             self.h.extend([int(h)]*num_render)
             self.w.extend([int(w)]*num_render)
+        self.train_time_indices = np.array(self.train_time_indices)
+        self.render_time_indices = np.array(self.render_time_indices)
 
     def __len__(self):
         return len(self.render_poses)
@@ -84,17 +90,20 @@ class LLFFRenderDataset(Dataset):
         render_pose = self.render_poses[idx]
         intrinsics = self.render_intrinsics[idx]
         depth_range = self.render_depth_range[idx]
+        time_index = self.render_time_indices[idx]
 
         train_set_id = self.render_train_set_ids[idx]
         train_rgb_files = self.train_rgb_files[train_set_id]
         train_poses = self.train_poses[train_set_id]
         train_intrinsics = self.train_intrinsics[train_set_id]
+        train_time_indices = self.train_time_indices[train_set_id]
 
         h, w = self.h[idx], self.w[idx]
         camera = np.concatenate(([h, w], intrinsics.flatten(),
                                  render_pose.flatten())).astype(np.float32)
 
         id_render = -1
+        # FIXME: input time_indices
         nearest_pose_ids = get_nearest_pose_ids(render_pose,
                                                 train_poses,
                                                 self.num_source_views,
@@ -103,6 +112,7 @@ class LLFFRenderDataset(Dataset):
 
         src_rgbs = []
         src_cameras = []
+        src_time_indices = train_time_indices[nearest_pose_ids.tolist()]
         for id in nearest_pose_ids:
             src_rgb = imageio.imread(train_rgb_files[id]).astype(np.float32) / 255.
             train_pose = train_poses[id]
@@ -118,11 +128,12 @@ class LLFFRenderDataset(Dataset):
         depth_range = torch.tensor([depth_range[0] * 0.9, depth_range[1] * 1.5])
 
         return {'camera': torch.from_numpy(camera),
+                'time_index': time_index,
                 'rgb_path': '',
                 'src_rgbs': torch.from_numpy(src_rgbs[..., :3]),
                 'src_cameras': torch.from_numpy(src_cameras),
-                'depth_range': depth_range
-                # TODO: return time_index, src_times
+                'depth_range': depth_range,
+                'src_time_indices': torch.from_numpy(src_time_indices),
                 }
 
 

@@ -137,11 +137,16 @@ def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
         print(imgdir, 'does not exist, returning')
         return
 
+    # CHECK: image file orders (time index)
     imgfiles = [os.path.join(imgdir, f) for f in sorted(os.listdir(imgdir)) if
                 f.endswith('JPG') or f.endswith('jpg') or f.endswith('png')]
 
-    # TODO: extract time index
+    # FIXME: int time index
+    time_indices = list(range(len(imgfiles)))
+    # time_indices = [i.split('/')[-1].split('.')[-2] for i in imgfiles]
+    # time_indices = [int(i.split('/')[-1].split('.')[-2]) for i in imgfiles]
     
+
     if poses.shape[-1] != len(imgfiles):
         imagesfile = os.path.join(basedir, 'sparse/0/images.bin')
         imdata = read_images_binary(imagesfile)
@@ -167,8 +172,7 @@ def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
         imgs = np.stack(imgs, -1)
         print('Loaded image data', imgs.shape, poses[:, -1, 0])
 
-    # FIXME: return time index
-    return poses, bds, imgs, imgfiles
+    return poses, bds, imgs, imgfiles, time_indices
 
 
 def normalize(x):
@@ -295,7 +299,7 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75,
     if out is None:
         return
     else:
-        poses, bds, imgs, imgfiles = out
+        poses, bds, imgs, imgfiles, time_indices = out
 
     # print('Loaded', basedir, bds.min(), bds.max())
 
@@ -367,11 +371,11 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75,
     # print('HOLDOUT view is', i_test)
     poses = poses.astype(np.float32)
 
-    return images, poses, bds, render_poses, i_test, imgfiles
+    return images, poses, bds, render_poses, i_test, imgfiles, time_indices
 
 
 if __name__ == '__main__':
-    scene_path = '/home/qianqianwang/datasets/nerf_llff_data/trex/'
-    images, poses, bds, render_poses, i_test, img_files = load_llff_data(scene_path)
+    scene_path = '/home/csvt32745/IBRNet/data/shiny/room/'
+    images, poses, bds, render_poses, i_test, img_files, time_indices = load_llff_data(scene_path)
     print(bds)
 

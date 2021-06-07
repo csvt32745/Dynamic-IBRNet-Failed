@@ -42,7 +42,7 @@ class LLFFDataset(Dataset):
         scenes = os.listdir(base_dir)
         for i, scene in enumerate(scenes):
             scene_path = os.path.join(base_dir, scene)
-            _, poses, bds, render_poses, i_test, rgb_files = load_llff_data(scene_path, load_imgs=False, factor=4)
+            _, poses, bds, render_poses, i_test, rgb_files, time_indices = load_llff_data(scene_path, load_imgs=False, factor=4)
             near_depth = np.min(bds)
             far_depth = np.max(bds)
             intrinsics, c2w_mats = batch_parse_llff_poses(poses)

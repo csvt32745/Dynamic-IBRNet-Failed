@@ -15,6 +15,7 @@
 import os
 import numpy as np
 import imageio
+from numpy.random import triangular
 import torch
 import sys
 sys.path.append('../')
@@ -36,10 +37,13 @@ class LLFFTestDataset(Dataset):
         self.render_poses = []
         self.render_train_set_ids = []
         self.render_depth_range = []
+        self.render_time_indices = []
 
         self.train_intrinsics = []
         self.train_poses = []
         self.train_rgb_files = []
+        self.train_time_indices = []
+
 
         all_scenes = os.listdir(self.folder_path)
         if len(scenes) > 0:
@@ -51,8 +55,7 @@ class LLFFTestDataset(Dataset):
         print("loading {} for {}".format(scenes, mode))
         for i, scene in enumerate(scenes):
             scene_path = os.path.join(self.folder_path, scene)
-            # FIXME: time_index
-            _, poses, bds, render_poses, i_test, rgb_files = load_llff_data(scene_path, load_imgs=False, factor=4)
+            _, poses, bds, render_poses, i_test, rgb_files, time_indices = load_llff_data(scene_path, load_imgs=False, factor=4)
             near_depth = np.min(bds)
             far_depth = np.max(bds)
             intrinsics, c2w_mats = batch_parse_llff_poses(poses)
@@ -69,12 +72,18 @@ class LLFFTestDataset(Dataset):
             self.train_intrinsics.append(intrinsics[i_train])
             self.train_poses.append(c2w_mats[i_train])
             self.train_rgb_files.append(np.array(rgb_files)[i_train].tolist())
+            self.train_time_indices.append(np.array(time_indices)[i_train].tolist())
+
             num_render = len(i_render)
             self.render_rgb_files.extend(np.array(rgb_files)[i_render].tolist())
+            self.render_time_indices.extend(np.array(time_indices)[i_render].tolist())
+
             self.render_intrinsics.extend([intrinsics_ for intrinsics_ in intrinsics[i_render]])
             self.render_poses.extend([c2w_mat for c2w_mat in c2w_mats[i_render]])
             self.render_depth_range.extend([[near_depth, far_depth]]*num_render)
             self.render_train_set_ids.extend([i]*num_render)
+        self.train_time_indices = np.array(self.train_time_indices)
+        self.render_time_indices = np.array(self.render_time_indices)
 
     def __len__(self):
         return len(self.render_rgb_files) * 100000 if self.mode == 'train' else len(self.render_rgb_files)
@@ -82,13 +91,14 @@ class LLFFTestDataset(Dataset):
     def __getitem__(self, idx):
         idx = idx % len(self.render_rgb_files)
         rgb_file = self.render_rgb_files[idx]
+        time_index = self.render_time_indices[idx]
         rgb = imageio.imread(rgb_file).astype(np.float32) / 255.
         render_pose = self.render_poses[idx]
         intrinsics = self.render_intrinsics[idx]
         depth_range = self.render_depth_range[idx]
 
-        # TODO: train_times
         train_set_id = self.render_train_set_ids[idx]
+        train_time_indices = self.train_time_indices[train_set_id]
         train_rgb_files = self.train_rgb_files[train_set_id]
         train_poses = self.train_poses[train_set_id]
         train_intrinsics = self.train_intrinsics[train_set_id]
@@ -108,7 +118,8 @@ class LLFFTestDataset(Dataset):
             id_render = -1
             subsample_factor = 1
             num_select = self.num_source_views
-
+        
+        # FIXME: input time_indices
         nearest_pose_ids = get_nearest_pose_ids(render_pose,
                                                 train_poses,
                                                 min(self.num_source_views*subsample_factor, 28),
@@ -123,7 +134,7 @@ class LLFFTestDataset(Dataset):
 
         src_rgbs = []
         src_cameras = []
-        # TODO: src_times = []
+        src_time_indices = train_time_indices[nearest_pose_ids.tolist()]
         for id in nearest_pose_ids:
             src_rgb = imageio.imread(train_rgb_files[id]).astype(np.float32) / 255.
             train_pose = train_poses[id]
@@ -137,7 +148,6 @@ class LLFFTestDataset(Dataset):
 
         src_rgbs = np.stack(src_rgbs, axis=0)
         src_cameras = np.stack(src_cameras, axis=0)
-        # src_times = np.stack(src_times, axis=0)
 
         if self.mode == 'train' and self.random_crop:
             crop_h = np.random.randint(low=250, high=750)
@@ -150,11 +160,12 @@ class LLFFTestDataset(Dataset):
         depth_range = torch.tensor([depth_range[0] * 0.9, depth_range[1] * 1.6])
 
         return {'rgb': torch.from_numpy(rgb[..., :3]),
+                'time_index': time_index,
                 'camera': torch.from_numpy(camera),
                 'rgb_path': rgb_file,
                 'src_rgbs': torch.from_numpy(src_rgbs[..., :3]),
                 'src_cameras': torch.from_numpy(src_cameras),
+                'src_time_indices': torch.from_numpy(src_time_indices),
                 'depth_range': depth_range,
-                # TODO: return time_index, src_times
                 }
 
