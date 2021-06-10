@@ -13,9 +13,9 @@ n_iters = 30000
 
 ## dataset
 train_dataset = llff_test # do not modify
-train_scenes = shiny/room
+train_scenes = nvidia_data_full/Jumping
 eval_dataset = llff_test # do not modify
-eval_scenes = shiny/room
+eval_scenes = nvidia_data_full/Jumping
 
 ### TRAINING
 N_rand = 800

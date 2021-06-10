@@ -137,15 +137,10 @@ def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
         print(imgdir, 'does not exist, returning')
         return
 
-    # CHECK: image file orders (time index)
     imgfiles = [os.path.join(imgdir, f) for f in sorted(os.listdir(imgdir)) if
                 f.endswith('JPG') or f.endswith('jpg') or f.endswith('png')]
 
-    # FIXME: int time index
-    time_indices = list(range(len(imgfiles)))
-    # time_indices = [i.split('/')[-1].split('.')[-2] for i in imgfiles]
-    # time_indices = [int(i.split('/')[-1].split('.')[-2]) for i in imgfiles]
-    
+    time_indices = [int(i.split('/')[-1].split('.')[-2]) for i in imgfiles]
 
     if poses.shape[-1] != len(imgfiles):
         imagesfile = os.path.join(basedir, 'sparse/0/images.bin')

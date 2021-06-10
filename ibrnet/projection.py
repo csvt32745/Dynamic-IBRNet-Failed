@@ -86,9 +86,9 @@ class Projector():
         ray_diff = ray_diff.reshape((num_views, ) + original_shape + (4, ))
         return ray_diff
 
-    def compute(self,  xyz, query_camera, train_imgs, train_cameras, featmaps):
+    def compute(self,  xyz, query_camera, train_imgs, train_cameras, featmaps, tar_time, src_times):
         '''
-        :param xyz: [n_rays, n_samples, 3]
+        :param xyz: [n_views, n_rays, n_samples, 3] (old): [n_rays, n_samples, 3]
         :param query_camera: [1, 34], 34 = img_size(2) + intrinsics(16) + extrinsics(16)
         :param train_imgs: [1, n_views, h, w, 3]
         :param train_cameras: [1, n_views, 34]
@@ -110,6 +110,7 @@ class Projector():
         h, w = train_cameras[0][:2]
 
         # compute the projection of the query points to each reference image
+        # TODO: project deformed pnts repectively
         pixel_locations, mask_in_front = self.compute_projections(xyz, train_cameras)
         normalized_pixel_locations = self.normalize(pixel_locations, h, w)   # [n_views, n_rays, n_samples, 2]
 
@@ -124,6 +125,7 @@ class Projector():
 
         # mask
         inbound = self.inbound(pixel_locations, h, w)
+        # TODO: angle
         ray_diff = self.compute_angle(xyz, query_camera, train_cameras)
         ray_diff = ray_diff.permute(1, 2, 0, 3)
         mask = (inbound * mask_in_front).float().permute(1, 2, 0)[..., None]   # [n_rays, n_samples, n_views, 1]

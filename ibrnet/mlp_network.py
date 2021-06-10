@@ -20,7 +20,6 @@ torch._C._jit_set_profiling_executor(False)
 torch._C._jit_set_profiling_mode(False)
 
 class DeformationModel(nn.Module):
-    # TODO: DeformationModel
     # Map (x, y, z, t0, t1) to (x', y', z', ...)
     
     def __init__(self, ch_in=5, ch_out=3, n_size=64, n_layer=3):
@@ -32,8 +31,30 @@ class DeformationModel(nn.Module):
         self.layers.append(nn.Linear(n_size, ch_out))
         self.layers = nn.Sequential(*self.layers)
     
-    def forward(self, x):
-        return self.layers(x)
+    def forward(self, tar_time, src_time, x):
+        # TODO: DeformationModel
+        ''' 
+        tar_time: scalar [1]
+        scr_time: [1, N_sources]
+        x: [N_rays, N_samples, 3]
+
+        input: [N_sources, N_rays, N_samples, 5(tars, srcs, x)]
+        output: [N_sources, N_rays, N_samples, 3]
+        '''
+        original_shape = x.shape[:2]
+        N_sources = src_time.size(1)
+        xx = x.repeat((N_sources, 1, 1, 1)).cuda() # [N_sources, N_rays, N_samples, 3]
+        out_shape = (N_sources, *original_shape) # (N_sources, N_rays, N_samples)
+        tar = torch.full((*out_shape, 1), tar_time.item(), device='cuda')  # [N_sources, N_rays, N_samples, 1]
+        src = torch.repeat_interleave(src_time.reshape(-1, 1).cuda(), original_shape[0]*original_shape[1], 1)
+        # print(src_time.shape, src.shape, out_shape)
+        src = src.reshape(*out_shape, 1)
+        
+        # out
+        dx = torch.cat([tar, src, xx], -1) # [N_sources, N_rays, N_samples, 5]
+        dx = self.layers(dx.reshape(-1, 5)).reshape(*out_shape, 3)
+        return xx, dx 
+
 
 class ScaledDotProductAttention(nn.Module):
     ''' Scaled Dot-Product Attention '''

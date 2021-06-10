@@ -28,7 +28,7 @@ def de_parallel(model):
 
 
 class IBRNetModel(object):
-    def __init__(self, args, load_opt=True, load_scheduler=True):
+    def __init__(self, args, load_opt=True, load_scheduler=True, load_deform=True):
         self.args = args
         device = torch.device('cuda:{}'.format(args.local_rank))
         # create coarse IBRNet
@@ -49,7 +49,7 @@ class IBRNetModel(object):
                                    coarse_only=self.args.coarse_only).cuda()
 
         # TODO: create DM, input args
-        self.deform_net = DeformationModel()
+        self.deform_net = DeformationModel().to(device)
 
         # optimizer and learning rate scheduler
         learnable_params = list(self.net_coarse.parameters())
@@ -61,8 +61,9 @@ class IBRNetModel(object):
             self.optimizer = torch.optim.Adam([
                 {'params': self.net_coarse.parameters()},
                 {'params': self.net_fine.parameters()},
-                {'params': self.feature_net.parameters(), 'lr': args.lrate_feature}
+                {'params': self.feature_net.parameters(), 'lr': args.lrate_feature},
                 # TODO: Optim: DeformationModel.parameters()
+                {'params': self.deform_net.parameters()},
                 ],
                 lr=args.lrate_mlp)
         else:
@@ -78,7 +79,8 @@ class IBRNetModel(object):
         out_folder = os.path.join(args.rootdir, 'out', args.expname)
         self.start_step = self.load_from_ckpt(out_folder,
                                               load_opt=load_opt,
-                                              load_scheduler=load_scheduler)
+                                              load_scheduler=load_scheduler,
+                                              load_deform=load_deform)
 
         if args.distributed:
             self.net_coarse = torch.nn.parallel.DistributedDataParallel(
@@ -104,6 +106,7 @@ class IBRNetModel(object):
         self.net_coarse.eval()
         self.feature_net.eval()
         # TODO: DM.eval()
+        self.deform_net.eval()
         if self.net_fine is not None:
             self.net_fine.eval()
 
@@ -111,6 +114,7 @@ class IBRNetModel(object):
         self.net_coarse.train()
         self.feature_net.train()
         # TODO: DM.train()
+        self.deform_net.train()
         if self.net_fine is not None:
             self.net_fine.train()
 
@@ -127,8 +131,13 @@ class IBRNetModel(object):
         torch.save(to_save, filename)
         
         # TODO: Save DM independently
+        sep = filename.rsplit('.', 1)
+        sep = sep[0] + sep[1]
+        sep = f"{sep[0]}_deform.{sep[1]}"
+        torch.save(self.deform_net.state_dict(), )
 
-    def load_model(self, filename, load_opt=True, load_scheduler=True):
+    def load_model(self, filename, load_opt=True, load_scheduler=True, load_deform=True):
+        # FIXME: load_deform in inference is True
         if self.args.distributed:
             to_load = torch.load(filename, map_location='cuda:{}'.format(self.args.local_rank))
         else:
@@ -146,11 +155,17 @@ class IBRNetModel(object):
             self.net_fine.load_state_dict(to_load['net_fine'])
         
         # TODO: Load DM independently
+        if load_deform:
+            sep = filename.rsplit('.', 1)
+            sep = sep[0] + sep[1]
+            sep = f"{sep[0]}_deform.{sep[1]}"
+            self.deform_net.load_state_dict(torch.load(sep))
 
     def load_from_ckpt(self, out_folder,
                        load_opt=True,
                        load_scheduler=True,
-                       force_latest_ckpt=False):
+                       force_latest_ckpt=False,
+                       load_deform=True):
         '''
         load model from existing checkpoints and return the current step
         :param out_folder: the directory that stores ckpts
@@ -169,7 +184,7 @@ class IBRNetModel(object):
 
         if len(ckpts) > 0 and not self.args.no_reload:
             fpath = ckpts[-1]
-            self.load_model(fpath, load_opt, load_scheduler)
+            self.load_model(fpath, load_opt, load_scheduler, load_deform)
             step = int(fpath[-10:-4])
             print('Reloading from {}, starting at step={}'.format(fpath, step))
         else:

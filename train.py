@@ -94,7 +94,7 @@ def train(args):
 
     # Create IBRNet model
     model = IBRNetModel(args, load_opt=not args.no_load_opt, load_scheduler=not args.no_load_scheduler)
-    
+
     # create projector
     projector = Projector(device=device)
 

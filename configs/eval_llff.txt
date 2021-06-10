@@ -6,8 +6,8 @@ ckpt_path = /home/csvt32745/IBRNet/out/finetune_llff/model_285000.pth   # REPLAC
 distributed = False
 
 ## dataset
-eval_dataset = shiny
-eval_scenes = shiny/room
+eval_dataset = nvidia_data_full
+eval_scenes = nvidia_data_full/Jumping
 
 ### TESTING
 chunk_size = 4096
