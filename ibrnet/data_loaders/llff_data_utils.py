@@ -317,6 +317,8 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75,
     if recenter:
         poses = recenter_poses(poses)
 
+
+    # TODO: Get render poses
     if spherify:
         poses, render_poses, bds = spherify_poses(poses, bds)
 

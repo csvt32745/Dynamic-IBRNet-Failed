@@ -195,7 +195,7 @@ def render_rays(ray_batch,
                                           ray_d=ray_batch['ray_d'],
                                           depth_range=ray_batch['depth_range'],
                                           N_samples=N_samples, inv_uniform=inv_uniform, det=det)
-    # TODO: map pts by deform model
+
     N_rays, N_samples = pts.shape[:2]    
     deformed_pts, d_pts = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts)
     deformed_pts = deformed_pts+d_pts

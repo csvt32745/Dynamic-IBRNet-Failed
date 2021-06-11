@@ -171,7 +171,6 @@ class Projector():
         h, w = train_cameras[0][:2]
 
         # compute the projection of the query points to each reference image
-        # TODO: project deformed pnts repectively
         pixel_locations, mask_in_front = self.compute_projections_respectively(deformed_xyz, train_cameras)
         normalized_pixel_locations = self.normalize(pixel_locations, h, w)   # [n_views, n_rays, n_samples, 2]
         
@@ -186,7 +185,6 @@ class Projector():
 
         # mask
         inbound = self.inbound(pixel_locations, h, w)
-        # TODO: angle
         ray_diff = self.compute_deformed_angle(xyz, deformed_xyz, query_camera, train_cameras)
         
         ray_diff = ray_diff.permute(1, 2, 0, 3)

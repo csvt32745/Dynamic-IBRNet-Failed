@@ -91,9 +91,8 @@ def train(args):
 
     val_loader = DataLoader(val_dataset, batch_size=1)
     val_loader_iterator = iter(cycle(val_loader))
-
     # Create IBRNet model
-    model = IBRNetModel(args, load_opt=not args.no_load_opt, load_scheduler=not args.no_load_scheduler, load_deform=False)
+    model = IBRNetModel(args, load_opt=not args.no_load_opt, load_scheduler=not args.no_load_scheduler, load_deform=not args.no_load_deform)
 
     # create projector
     projector = Projector(device=device)
@@ -108,8 +107,6 @@ def train(args):
 
     global_step = model.start_step + 1
     epoch = 0
-    # FIXME:
-    torch.autograd.set_detect_anomaly(True)
     while global_step < model.start_step + args.n_iters + 1:
         np.random.seed()
         for train_data in train_loader:
