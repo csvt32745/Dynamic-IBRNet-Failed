@@ -2,15 +2,15 @@
 expname = finetune_llff
 rootdir = /home/csvt32745/IBRNet/  # REPLACE THIS with YOUR PATH.
 #ckpt_path = /home/csvt32745/IBRNet/pretrained/model_255000.pth  # REPLACE THIS with YOUR PATH.
-ckpt_path = /home/csvt32745/IBRNet/out/finetune_llff/model_270000.pth  # REPLACE THIS with YOUR PATH.
+ckpt_path = /home/csvt32745/IBRNet/out/finetune_llff/model_285000.pth  # REPLACE THIS with YOUR PATH.
 no_reload = False
 render_stride = 2
 distributed = False
     # should be True, or it will load modules from DeformationModel and error
 no_load_opt = True
 no_load_scheduler = True 
-no_load_deform = True
     #
+#no_load_deform = True
 n_iters = 30000 # 30000
 
 ## dataset

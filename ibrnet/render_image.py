@@ -63,6 +63,10 @@ def render_single_image(ray_sampler,
                           det=det,
                           white_bkgd=white_bkgd)
 
+        # remove loss term
+        ret['outputs_coarse'].pop('loss_d', None)
+        ret['outputs_fine'].pop('loss_d', None)
+
         # handle both coarse and fine outputs
         # cache chunk results on cpu
         if i == 0:

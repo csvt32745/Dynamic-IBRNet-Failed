@@ -103,9 +103,8 @@ class LLFFRenderDataset(Dataset):
                                  render_pose.flatten())).astype(np.float32)
 
         id_render = -1
-        # FIXME: input time_indices
-        nearest_pose_ids = get_nearest_pose_ids(render_pose,
-                                                train_poses,
+        nearest_pose_ids = get_nearest_pose_ids(time_index, train_time_indices,
+                                                render_pose, train_poses,
                                                 self.num_source_views,
                                                 tar_id=id_render,
                                                 angular_dist_method='dist')

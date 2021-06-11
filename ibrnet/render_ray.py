@@ -210,6 +210,10 @@ def render_rays(ray_batch,
     raw_coarse = model.net_coarse(rgb_feat, ray_diff, mask)   # [N_rays, N_samples, 4]
     outputs_coarse = raw2outputs(raw_coarse, z_vals, pixel_mask,
                                  white_bkgd=white_bkgd)
+
+    # Deformation Regularization
+    outputs_coarse['loss_d'] = torch.norm(d_pts, dim=-1).mean()
+                                
     ret['outputs_coarse'] = outputs_coarse
 
     if N_importance > 0:
@@ -254,6 +258,7 @@ def render_rays(ray_batch,
         raw_fine = model.net_fine(rgb_feat_sampled, ray_diff, mask)
         outputs_fine = raw2outputs(raw_fine, z_vals, pixel_mask,
                                    white_bkgd=white_bkgd)
+        outputs_fine['loss_d'] = torch.norm(d_pts, dim=-1).mean()
         ret['outputs_fine'] = outputs_fine
 
     return ret

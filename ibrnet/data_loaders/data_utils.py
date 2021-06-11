@@ -223,7 +223,8 @@ def batched_angular_dist_rot_matrix(R1, R2):
                              a_min=-1 + TINY_NUMBER, a_max=1 - TINY_NUMBER))
 
 
-def get_nearest_pose_ids(tar_pose, ref_poses, num_select, tar_id=-1, angular_dist_method='vector',
+def get_nearest_pose_ids(tar_time, ref_times,
+                         tar_pose, ref_poses, num_select, tar_id=-1, angular_dist_method='vector',
                          scene_center=(0, 0, 0)):
     '''
     Args:
@@ -256,6 +257,9 @@ def get_nearest_pose_ids(tar_pose, ref_poses, num_select, tar_id=-1, angular_dis
         assert tar_id < num_cams
         dists[tar_id] = 1e3  # make sure not to select the target id itself
 
+    # Manually add t+1, t-1
+    dists[(ref_times==(tar_time+1)) | (ref_times==(tar_time-1))] = 0
+    
     sorted_ids = np.argsort(dists)
     selected_ids = sorted_ids[:num_select]
     # print(angular_dists[selected_ids] * 180 / np.pi)

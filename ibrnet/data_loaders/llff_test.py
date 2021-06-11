@@ -119,9 +119,8 @@ class LLFFTestDataset(Dataset):
             subsample_factor = 1
             num_select = self.num_source_views
         
-        # FIXME: input time_indices
-        nearest_pose_ids = get_nearest_pose_ids(render_pose,
-                                                train_poses,
+        nearest_pose_ids = get_nearest_pose_ids(time_index, train_time_indices,
+                                                render_pose, train_poses,
                                                 min(self.num_source_views*subsample_factor, 28),
                                                 tar_id=id_render,
                                                 angular_dist_method='dist')
