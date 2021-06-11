@@ -48,7 +48,6 @@ class IBRNetModel(object):
                                    fine_out_ch=self.args.fine_feat_dim,
                                    coarse_only=self.args.coarse_only).cuda()
 
-        # TODO: create DM, input args
         self.deform_net = DeformationModel().to(device)
 
         # optimizer and learning rate scheduler
@@ -62,7 +61,6 @@ class IBRNetModel(object):
                 {'params': self.net_coarse.parameters()},
                 {'params': self.net_fine.parameters()},
                 {'params': self.feature_net.parameters(), 'lr': args.lrate_feature},
-                # TODO: Optim: DeformationModel.parameters()
                 {'params': self.deform_net.parameters()},
                 ],
                 lr=args.lrate_mlp)
@@ -105,7 +103,6 @@ class IBRNetModel(object):
     def switch_to_eval(self):
         self.net_coarse.eval()
         self.feature_net.eval()
-        # TODO: DM.eval()
         self.deform_net.eval()
         if self.net_fine is not None:
             self.net_fine.eval()
@@ -113,7 +110,6 @@ class IBRNetModel(object):
     def switch_to_train(self):
         self.net_coarse.train()
         self.feature_net.train()
-        # TODO: DM.train()
         self.deform_net.train()
         if self.net_fine is not None:
             self.net_fine.train()
@@ -130,11 +126,10 @@ class IBRNetModel(object):
 
         torch.save(to_save, filename)
         
-        # TODO: Save DM independently
         sep = filename.rsplit('.', 1)
-        sep = sep[0] + sep[1]
         sep = f"{sep[0]}_deform.{sep[1]}"
-        torch.save(self.deform_net.state_dict(), )
+        print(sep)
+        torch.save(self.deform_net.state_dict(), sep)
 
     def load_model(self, filename, load_opt=True, load_scheduler=True, load_deform=True):
         # FIXME: load_deform in inference is True
@@ -154,10 +149,8 @@ class IBRNetModel(object):
         if self.net_fine is not None and 'net_fine' in to_load.keys():
             self.net_fine.load_state_dict(to_load['net_fine'])
         
-        # TODO: Load DM independently
         if load_deform:
             sep = filename.rsplit('.', 1)
-            sep = sep[0] + sep[1]
             sep = f"{sep[0]}_deform.{sep[1]}"
             self.deform_net.load_state_dict(torch.load(sep))
 

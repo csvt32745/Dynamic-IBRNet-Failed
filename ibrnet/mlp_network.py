@@ -25,10 +25,17 @@ class DeformationModel(nn.Module):
     def __init__(self, ch_in=5, ch_out=3, n_size=64, n_layer=3):
         super().__init__()
         self.layers = [
-            nn.Linear(ch_in, n_size)
+            nn.Linear(ch_in, n_size),
         ]
-        self.layers += [ nn.Linear(n_size, n_size) for i in range(n_layer) ]
-        self.layers.append(nn.Linear(n_size, ch_out))
+        for i in range(n_layer):
+            self.layers += [
+                nn.ReLU(True),
+                nn.Linear(n_size, n_size)
+            ]
+        self.layers += [
+                nn.ReLU(True),
+                nn.Linear(n_size, ch_out)
+        ]
         self.layers = nn.Sequential(*self.layers)
     
     def forward(self, tar_time, src_time, x):

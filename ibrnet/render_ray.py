@@ -200,14 +200,11 @@ def render_rays(ray_batch,
     deformed_pts, d_pts = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts)
     deformed_pts = deformed_pts+d_pts
 
-
-    # FIXME: input time
-    rgb_feat, ray_diff, mask = projector.compute(pts, ray_batch['camera'],
+    rgb_feat, ray_diff, mask = projector.compute(pts, deformed_pts, 
+                                                 ray_batch['camera'],
                                                  ray_batch['src_rgbs'],
                                                  ray_batch['src_cameras'],
                                                  featmaps=featmaps[0],
-                                                 tar_time=ray_batch['time_index'],
-                                                 src_times=ray_batch['src_time_indices'],
                                                  )  # [N_rays, N_samples, N_views, x]
     pixel_mask = mask[..., 0].sum(dim=2) > 1   # [N_rays, N_samples], should at least have 2 observations
     raw_coarse = model.net_coarse(rgb_feat, ray_diff, mask)   # [N_rays, N_samples, 4]
@@ -244,7 +241,11 @@ def render_rays(ray_batch,
         ray_o = ray_batch['ray_o'].unsqueeze(1).repeat(1, N_total_samples, 1)
         pts = z_vals.unsqueeze(2) * viewdirs + ray_o  # [N_rays, N_samples + N_importance, 3]
 
-        rgb_feat_sampled, ray_diff, mask = projector.compute(pts, ray_batch['camera'],
+        deformed_pts, d_pts = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts)
+        deformed_pts = deformed_pts+d_pts
+
+        rgb_feat_sampled, ray_diff, mask = projector.compute(pts, deformed_pts,
+                                                             ray_batch['camera'],
                                                              ray_batch['src_rgbs'],
                                                              ray_batch['src_cameras'],
                                                              featmaps=featmaps[1])

@@ -93,7 +93,7 @@ def train(args):
     val_loader_iterator = iter(cycle(val_loader))
 
     # Create IBRNet model
-    model = IBRNetModel(args, load_opt=not args.no_load_opt, load_scheduler=not args.no_load_scheduler)
+    model = IBRNetModel(args, load_opt=not args.no_load_opt, load_scheduler=not args.no_load_scheduler, load_deform=False)
 
     # create projector
     projector = Projector(device=device)
@@ -108,6 +108,8 @@ def train(args):
 
     global_step = model.start_step + 1
     epoch = 0
+    # FIXME:
+    torch.autograd.set_detect_anomaly(True)
     while global_step < model.start_step + args.n_iters + 1:
         np.random.seed()
         for train_data in train_loader:
@@ -125,7 +127,10 @@ def train(args):
                                                   sample_mode=args.sample_mode,
                                                   center_ratio=args.center_ratio,
                                                   )
-
+            
+            ray_batch['src_time_indices'] = train_data['src_time_indices']
+            ray_batch['time_index'] = train_data['time_index']
+            
             featmaps = model.feature_net(ray_batch['src_rgbs'].squeeze(0).permute(0, 3, 1, 2))
 
             ret = render_rays(ray_batch=ray_batch,
@@ -182,19 +187,28 @@ def train(args):
                 if global_step % args.i_img == 0:
                     print('Logging a random validation view...')
                     val_data = next(val_loader_iterator)
+                    time_dict = {
+                        'src_time_indices': val_data['src_time_indices'],
+                        'time_index': val_data['time_index']
+                    }
+                    
                     tmp_ray_sampler = RaySamplerSingleImage(val_data, device, render_stride=args.render_stride)
                     H, W = tmp_ray_sampler.H, tmp_ray_sampler.W
                     gt_img = tmp_ray_sampler.rgb.reshape(H, W, 3)
-                    log_view_to_tb(writer, global_step, args, model, tmp_ray_sampler, projector,
+                    log_view_to_tb(writer, global_step, args, model, tmp_ray_sampler, time_dict, projector,
                                    gt_img, render_stride=args.render_stride, prefix='val/')
                     torch.cuda.empty_cache()
 
                     print('Logging current training view...')
+                    time_dict = {
+                        'src_time_indices': train_data['src_time_indices'],
+                        'time_index': train_data['time_index']
+                    }
                     tmp_ray_train_sampler = RaySamplerSingleImage(train_data, device,
                                                                   render_stride=1)
                     H, W = tmp_ray_train_sampler.H, tmp_ray_train_sampler.W
                     gt_img = tmp_ray_train_sampler.rgb.reshape(H, W, 3)
-                    log_view_to_tb(writer, global_step, args, model, tmp_ray_train_sampler, projector,
+                    log_view_to_tb(writer, global_step, args, model, tmp_ray_train_sampler, time_dict, projector,
                                    gt_img, render_stride=1, prefix='train/')
             global_step += 1
             if global_step > model.start_step + args.n_iters + 1:
@@ -202,11 +216,13 @@ def train(args):
         epoch += 1
 
 
-def log_view_to_tb(writer, global_step, args, model, ray_sampler, projector, gt_img,
+def log_view_to_tb(writer, global_step, args, model, ray_sampler, time_dict, projector, gt_img,
                    render_stride=1, prefix=''):
     model.switch_to_eval()
     with torch.no_grad():
         ray_batch = ray_sampler.get_all()
+        ray_batch.update(time_dict)
+
         if model.feature_net is not None:
             featmaps = model.feature_net(ray_batch['src_rgbs'].squeeze(0).permute(0, 3, 1, 2))
         else:
