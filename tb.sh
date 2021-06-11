@@ -1,0 +1,1 @@
+tensorboard --logdir /home/csvt32745/IBRNet/logs/finetune_llff/

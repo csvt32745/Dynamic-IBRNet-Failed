@@ -146,7 +146,7 @@ if __name__ == '__main__':
     # assert False
 
     # Create ibrnet model
-    model = IBRNetModel(args, load_scheduler=False, load_opt=False)
+    model = IBRNetModel(args, load_scheduler=False, load_opt=False, load_deform=True)
     eval_dataset_name = args.eval_dataset
     extra_out_dir = '{}/{}'.format(eval_dataset_name, args.expname)
     print('saving results to {}...'.format(extra_out_dir))
@@ -178,8 +178,10 @@ if __name__ == '__main__':
         with torch.no_grad():
             ray_sampler = RaySamplerSingleImage(data, device='cuda:0')
             ray_batch = ray_sampler.get_all()
-            featmaps = model.feature_net(ray_batch['src_rgbs'].squeeze(0).permute(0, 3, 1, 2))
+            ray_batch['src_time_indices'] = data['src_time_indices']
+            ray_batch['time_index'] = data['time_index']
 
+            featmaps = model.feature_net(ray_batch['src_rgbs'].squeeze(0).permute(0, 3, 1, 2))
             ret = render_single_image(ray_sampler=ray_sampler,
                                       ray_batch=ray_batch,
                                       model=model,

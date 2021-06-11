@@ -1,15 +1,17 @@
 ### INPUT
 expname = finetune_llff
 rootdir = /home/csvt32745/IBRNet/  # REPLACE THIS with YOUR PATH.
-ckpt_path = /home/csvt32745/IBRNet/pretrained/model_255000.pth  # REPLACE THIS with YOUR PATH.
+#ckpt_path = /home/csvt32745/IBRNet/pretrained/model_255000.pth  # REPLACE THIS with YOUR PATH.
+ckpt_path = /home/csvt32745/IBRNet/out/finetune_llff/model_270000.pth  # REPLACE THIS with YOUR PATH.
 no_reload = False
 render_stride = 2
 distributed = False
     # should be True, or it will load modules from DeformationModel and error
 no_load_opt = True
 no_load_scheduler = True 
+no_load_deform = True
     #
-n_iters = 30000
+n_iters = 30000 # 30000
 
 ## dataset
 train_dataset = llff_test # do not modify
@@ -18,7 +20,7 @@ eval_dataset = llff_test # do not modify
 eval_scenes = nvidia_data_full/Jumping
 
 ### TRAINING
-N_rand = 800
+N_rand = 600 #800
 lrate_feature = 0.0005
 lrate_mlp = 0.0002
 lrate_decay_factor = 0.5
@@ -35,6 +37,6 @@ inv_uniform = True
 white_bkgd = False
 
 ### CONSOLE AND TENSORBOARD
-i_img = 2000
+i_img = 1000
 i_print = 100
 i_weights = 5000

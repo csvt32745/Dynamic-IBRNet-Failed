@@ -132,7 +132,6 @@ class IBRNetModel(object):
         torch.save(self.deform_net.state_dict(), sep)
 
     def load_model(self, filename, load_opt=True, load_scheduler=True, load_deform=True):
-        # FIXME: load_deform in inference is True
         if self.args.distributed:
             to_load = torch.load(filename, map_location='cuda:{}'.format(self.args.local_rank))
         else:

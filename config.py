@@ -75,6 +75,8 @@ def config_parser():
                         help='do not load optimizer when reloading')
     parser.add_argument("--no_load_scheduler", action='store_true',
                         help='do not load scheduler when reloading')
+    parser.add_argument("--no_load_deform", action='store_true',
+                        help='do not load deform net when reloading')
 
     ########### iterations & learning rate options ##########
     parser.add_argument("--n_iters", type=int, default=250000, help='num of iterations')
