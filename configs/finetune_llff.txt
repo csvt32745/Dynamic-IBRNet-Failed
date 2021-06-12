@@ -9,6 +9,7 @@ distributed = False
     # should be True, or it will load modules from DeformationModel and error
 no_load_opt = True
 no_load_scheduler = True 
+no_load_deform = True
     #
 no_load_deform = True
 n_iters = 50000 # 30000
