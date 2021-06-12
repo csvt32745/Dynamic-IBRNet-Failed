@@ -175,7 +175,8 @@ def render_rays(ray_batch,
                 inv_uniform=False,
                 N_importance=0,
                 det=False,
-                white_bkgd=False):
+                white_bkgd=False,
+                return_deform_loss=False):
     '''
     :param ray_batch: {'ray_o': [N_rays, 3] , 'ray_d': [N_rays, 3], 'view_dir': [N_rays, 2]}
     :param model:  {'net_coarse':  , 'net_fine': }
@@ -196,9 +197,11 @@ def render_rays(ray_batch,
                                           depth_range=ray_batch['depth_range'],
                                           N_samples=N_samples, inv_uniform=inv_uniform, det=det)
 
-    N_rays, N_samples = pts.shape[:2]    
-    deformed_pts, d_pts = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts)
-    deformed_pts = deformed_pts+d_pts
+    N_rays, N_samples = pts.shape[:2]
+    if return_deform_loss:
+        deformed_pts, loss_d = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, is_loss=True)
+    else:
+        deformed_pts = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, is_loss=False)
 
     rgb_feat, ray_diff, mask = projector.compute(pts, deformed_pts, 
                                                  ray_batch['camera'],
@@ -212,7 +215,8 @@ def render_rays(ray_batch,
                                  white_bkgd=white_bkgd)
 
     # Deformation Regularization
-    outputs_coarse['loss_d'] = torch.norm(d_pts, dim=-1).mean()
+    if return_deform_loss:
+        outputs_coarse['loss_d'] = loss_d
                                 
     ret['outputs_coarse'] = outputs_coarse
 
@@ -244,9 +248,11 @@ def render_rays(ray_batch,
         viewdirs = ray_batch['ray_d'].unsqueeze(1).repeat(1, N_total_samples, 1)
         ray_o = ray_batch['ray_o'].unsqueeze(1).repeat(1, N_total_samples, 1)
         pts = z_vals.unsqueeze(2) * viewdirs + ray_o  # [N_rays, N_samples + N_importance, 3]
-
-        deformed_pts, d_pts = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts)
-        deformed_pts = deformed_pts+d_pts
+        
+        if return_deform_loss:
+            deformed_pts, loss_d = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, True)
+        else:
+            deformed_pts = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, False)
 
         rgb_feat_sampled, ray_diff, mask = projector.compute(pts, deformed_pts,
                                                              ray_batch['camera'],
@@ -258,7 +264,8 @@ def render_rays(ray_batch,
         raw_fine = model.net_fine(rgb_feat_sampled, ray_diff, mask)
         outputs_fine = raw2outputs(raw_fine, z_vals, pixel_mask,
                                    white_bkgd=white_bkgd)
-        outputs_fine['loss_d'] = torch.norm(d_pts, dim=-1).mean()
+
+        if return_deform_loss: outputs_fine['loss_d'] = loss_d
         ret['outputs_fine'] = outputs_fine
 
     return ret

@@ -16,35 +16,63 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from copy import deepcopy
+
+from torch.nn.modules.batchnorm import BatchNorm1d
 torch._C._jit_set_profiling_executor(False)
 torch._C._jit_set_profiling_mode(False)
 
 class DeformationModel(nn.Module):
     # Map (x, y, z, t0, t1) to (x', y', z', ...)
     
-    def __init__(self, ch_in=5, ch_out=3, n_size=64, n_layer=3):
+    def __init__(self, ch_in=5, ch_out=3, n_size=96, n_layer=4, n_emb_pos=8, n_emb_time=2):
         super().__init__()
-        self.layers = [
-            nn.Linear(ch_in, n_size),
+        # self.ch_in = n_emb_pos*3*2+n_emb_time*2*2 # x, y, z, t0, t1
+        self.ch_in = ch_in
+        self.deform = [
+            nn.Linear(self.ch_in, n_size),
         ]
         for i in range(n_layer):
-            self.layers += [
+            self.deform += [
                 nn.ReLU(True),
                 nn.Linear(n_size, n_size)
             ]
-        self.layers += [
+        self.deform += [
                 nn.ReLU(True),
                 nn.Linear(n_size, ch_out)
         ]
-        self.layers = nn.Sequential(*self.layers)
-    
-    def forward(self, tar_time, src_time, x):
+        # self.deform_inv = deepcopy(self.deform)
+        
+        # from views to canonical frames and inversed
+        self.deform = nn.Sequential(*self.deform)
+        # self.deform_inv = nn.Sequential(*self.deform_inv)
+        
+        self.coef_pos = self.coef_table(n_emb_pos).cuda()
+        self.coef_time = self.coef_table(n_emb_time).cuda()
+
+        self.crit_smooth = nn.SmoothL1Loss()
+
+    def coef_table(self, L):    
+        return  2**torch.arange(L)*np.pi
+
+    def pos_enc(self, x, coef_table):
+        """ 
+        x: [..., D]
+        sin_table: [L]
+        """
+        coef = torch.repeat_interleave(coef_table, 2) # 2L: (sin, cos, sin, cos, ...)
+        xx = torch.repeat_interleave(x, coef.size(0), dim=-1) * coef.repeat(x.size(-1)).reshape(1, -1) # [..., 2L*D]: (D1*2L, D2*2L)
+        ret = xx.clone()
+        ret[..., 0::2] = torch.sin(xx[..., 0::2])
+        ret[..., 1::2] = torch.cos(xx[..., 1::2])
+        return ret
+
+    def forward(self, tar_time, src_time, x, is_loss=False):
         # TODO: DeformationModel
         ''' 
         tar_time: scalar [1]
         scr_time: [1, N_sources]
         x: [N_rays, N_samples, 3]
-
         input: [N_sources, N_rays, N_samples, 5(tars, srcs, x)]
         output: [N_sources, N_rays, N_samples, 3]
         '''
@@ -58,9 +86,83 @@ class DeformationModel(nn.Module):
         src = src.reshape(*out_shape, 1)
         
         # out
-        dx = torch.cat([tar, src, xx], -1) # [N_sources, N_rays, N_samples, 5]
-        dx = self.layers(dx.reshape(-1, 5)).reshape(*out_shape, 3)
-        return xx, dx 
+        # tar = self.pos_enc(tar.reshape(-1, 1), self.coef_time)
+        tar = tar.reshape(-1, 1)
+        # src = self.pos_enc(src.reshape(-1, 1), self.coef_time)
+        src = src.reshape(-1, 1)
+        # dx = torch.cat([tar, src, self.pos_enc(xx.reshape(-1, 3), self.coef_pos)], -1) # [N_sources*N_rays*N_samples, 5]
+        dx = torch.cat([tar, src, xx.reshape(-1, 3)], -1) # [N_sources*N_rays*N_samples, 5]
+        dx = self.deform(dx).reshape(*out_shape, 3)
+        ret = xx+dx
+
+        if is_loss:            
+            # Indentity loss
+            # ret_emb = self.pos_enc(ret.reshape(-1, 3), self.coef_pos)
+            ret_emb = ret.reshape(-1, 3)
+            # di0 = torch.cat([tar, tar, self.pos_enc(xx.reshape(-1, 3), self.coef_pos)], -1)
+            di0 = torch.cat([tar, tar, xx.reshape(-1, 3)], -1)
+            di0 = self.deform(di0)
+            di1 = torch.cat([src, src, ret_emb], -1)
+            di1 = self.deform(di1)
+            
+            loss_i = torch.norm(di0, dim=-1).mean() + torch.norm(di1, dim=-1).mean()
+
+            # bidirectional loss
+            dx_ = torch.cat([src, tar, ret_emb], -1)
+            dx_ = self.deform(dx_).reshape(*out_shape, 3)
+            loss_bi = torch.norm(dx+dx_, dim=-1).mean()
+            
+            # smooth regularization
+            # smooth = torch.norm(dx, p=1, dim=-1).mean() + torch.norm(dx_, p=1, dim=-1).mean()
+            # smooth = self.crit_smooth(dx, torch.zeros_like(dx, device='cuda')) + self.crit_smooth(dx_, torch.zeros_like(dx_, device='cuda'))
+            return ret, loss_bi + loss_i
+
+        return ret
+
+    def forward_(self, tar_time, src_time, x, is_loss=False):
+        # TODO: DeformationModel
+        ''' 
+        tar_time: scalar [1]
+        scr_time: [1, N_sources]
+        x: [N_rays, N_samples, 3]
+
+        input: [N_sources, N_rays, N_samples, 1(time)]
+        output: [N_sources, N_rays, N_samples, 3]
+        '''
+        N_sources = src_time.size(1)
+        original_shape = x.shape[:2]
+        x = x.cuda().reshape(-1, 3)
+
+        # x_tar to x_canonical
+        tar = torch.full((x.size(0), 1), tar_time.item(), device='cuda')  # [N_rays, N_samples, 1]
+        dx_t2can = self.deform(torch.cat([self.pos_enc(x, self.coef_pos), self.pos_enc(tar, self.coef_time)], -1).reshape(-1, self.ch_in))
+        x_canonical = x + dx_t2can # [N_rays*N_samples, 3]
+
+        # x_canonical to x_src's
+        src = torch.repeat_interleave(src_time.reshape(-1, 1).cuda(), original_shape[0]*original_shape[1], 1).reshape(-1, 1)
+        # [N_sources*N_rays*N_samples, 1]
+        xx = x_canonical.repeat((N_sources, 1, 1)).reshape(-1, 3) # [N_sources*N_rays*N_samples, 3]
+        dx_can2s = self.deform_inv(torch.cat([self.pos_enc(xx, self.coef_pos), self.pos_enc(src, self.coef_time)], -1))
+        x_src = xx + dx_can2s # [N_sources*N_rays*N_samples, 3]
+
+        ret = x_src.reshape(N_sources, *original_shape, 3) # [N_sources, N_rays, N_samples, 3]
+
+        if is_loss:
+            # smooth regularization
+            smooth = torch.norm(dx_t2can, dim=-1).mean() + torch.norm(dx_can2s, dim=-1).mean()
+            
+            # bidirectional loss
+            bi_loss1 = torch.norm(self.deform_inv(torch.cat([
+                self.pos_enc(x_canonical, self.coef_pos), self.pos_enc(tar.reshape(-1, 1), self.coef_time)
+                ], -1)) + dx_t2can, dim=-1).mean()
+            
+            bi_loss2 = torch.norm(self.deform(torch.cat([
+                self.pos_enc(x_src, self.coef_pos), self.pos_enc(src, self.coef_time)
+                ], -1)) + dx_can2s, dim=-1).mean()
+
+            return ret, smooth + bi_loss1 + bi_loss2
+        
+        return ret
 
 
 class ScaledDotProductAttention(nn.Module):

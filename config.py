@@ -86,6 +86,8 @@ def config_parser():
                         help='decay learning rate by a factor every specified number of steps')
     parser.add_argument("--lrate_decay_steps", type=int, default=50000,
                         help='decay learning rate by a factor every specified number of steps')
+#     parser.add_argument("--return_deform_loss", action='store_true',
+#                         help='return loss when forwarding deform net')
 
     ########## rendering options ##########
     parser.add_argument("--N_samples", type=int, default=64, help='number of coarse samples per ray')

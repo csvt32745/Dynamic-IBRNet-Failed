@@ -1,8 +1,8 @@
 ### INPUT
 expname = finetune_llff
 rootdir = /home/csvt32745/IBRNet/  # REPLACE THIS with YOUR PATH.
-#ckpt_path = /home/csvt32745/IBRNet/pretrained/model_255000.pth  # REPLACE THIS with YOUR PATH.
-ckpt_path = /home/csvt32745/IBRNet/out/finetune_llff/model_285000.pth  # REPLACE THIS with YOUR PATH.
+ckpt_path = /home/csvt32745/IBRNet/pretrained/model_255000.pth  # REPLACE THIS with YOUR PATH.
+#ckpt_path = /home/csvt32745/IBRNet/out/finetune_llff/model_265000.pth  # REPLACE THIS with YOUR PATH.
 no_reload = False
 render_stride = 2
 distributed = False
@@ -10,8 +10,8 @@ distributed = False
 no_load_opt = True
 no_load_scheduler = True 
     #
-#no_load_deform = True
-n_iters = 30000 # 30000
+no_load_deform = True
+n_iters = 50000 # 30000
 
 ## dataset
 train_dataset = llff_test # do not modify
@@ -20,7 +20,8 @@ eval_dataset = llff_test # do not modify
 eval_scenes = nvidia_data_full/Jumping
 
 ### TRAINING
-N_rand = 600 #800
+#return_deform_loss=True
+N_rand = 400 #800
 lrate_feature = 0.0005
 lrate_mlp = 0.0002
 lrate_decay_factor = 0.5

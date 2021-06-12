@@ -38,7 +38,7 @@ class LLFFRenderDataset(Dataset):
         self.num_source_views = args.num_source_views
 
         print("loading {} for rendering".format(scenes))
-
+        self.time_max = []
         self.render_rgb_files = []
         self.render_intrinsics = []
         self.render_poses = []
@@ -55,7 +55,7 @@ class LLFFRenderDataset(Dataset):
 
         for i, scene in enumerate(scenes):
             scene_path = os.path.join(self.folder_path, scene)
-            _, poses, bds, render_poses, i_test, rgb_files, time_indices = load_llff_data(scene_path, load_imgs=False, factor=4)
+            _, poses, bds, render_poses, i_test, rgb_files, time_indices, time_max = load_llff_data(scene_path, load_imgs=False, factor=4)
             near_depth = np.min(bds)
             far_depth = np.max(bds)
             intrinsics, c2w_mats = batch_parse_llff_poses(poses)
@@ -67,6 +67,7 @@ class LLFFRenderDataset(Dataset):
             i_train = np.array([i for i in np.arange(len(rgb_files)) if
                                 (i not in i_test and i not in i_val)])
 
+            self.time_max.append(time_max)
             self.train_intrinsics.append(intrinsics[i_train])
             self.train_poses.append(c2w_mats[i_train])
             self.train_rgb_files.append(np.array(rgb_files)[i_train].tolist())
@@ -93,6 +94,7 @@ class LLFFRenderDataset(Dataset):
         time_index = self.render_time_indices[idx]
 
         train_set_id = self.render_train_set_ids[idx]
+        time_max = self.time_max[train_set_id]
         train_rgb_files = self.train_rgb_files[train_set_id]
         train_poses = self.train_poses[train_set_id]
         train_intrinsics = self.train_intrinsics[train_set_id]
@@ -127,12 +129,13 @@ class LLFFRenderDataset(Dataset):
         depth_range = torch.tensor([depth_range[0] * 0.9, depth_range[1] * 1.5])
 
         return {'camera': torch.from_numpy(camera),
-                'time_index': time_index,
+                'time_index': time_index/time_max,
                 'rgb_path': '',
                 'src_rgbs': torch.from_numpy(src_rgbs[..., :3]),
                 'src_cameras': torch.from_numpy(src_cameras),
                 'depth_range': depth_range,
-                'src_time_indices': torch.from_numpy(src_time_indices),
+                'src_time_indices': torch.from_numpy(src_time_indices)/time_max,
+                # 'time_max': time_max,
                 }
 
 

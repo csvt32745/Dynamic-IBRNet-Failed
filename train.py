@@ -124,7 +124,7 @@ def train(args):
                                                   sample_mode=args.sample_mode,
                                                   center_ratio=args.center_ratio,
                                                   )
-            
+            # time_max = train_data['time_max']
             ray_batch['src_time_indices'] = train_data['src_time_indices']
             ray_batch['time_index'] = train_data['time_index']
             
@@ -138,7 +138,8 @@ def train(args):
                               inv_uniform=args.inv_uniform,
                               N_importance=args.N_importance,
                               det=args.det,
-                              white_bkgd=args.white_bkgd)
+                              white_bkgd=args.white_bkgd,
+                              return_deform_loss=True)
 
             # compute loss
             model.optimizer.zero_grad()

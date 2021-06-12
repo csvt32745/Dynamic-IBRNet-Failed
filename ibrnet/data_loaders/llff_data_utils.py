@@ -140,7 +140,9 @@ def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
     imgfiles = [os.path.join(imgdir, f) for f in sorted(os.listdir(imgdir)) if
                 f.endswith('JPG') or f.endswith('jpg') or f.endswith('png')]
 
+    # TODO: get max time
     time_indices = [int(i.split('/')[-1].split('.')[-2]) for i in imgfiles]
+    time_max = max(time_indices)
 
     if poses.shape[-1] != len(imgfiles):
         imagesfile = os.path.join(basedir, 'sparse/0/images.bin')
@@ -167,7 +169,7 @@ def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
         imgs = np.stack(imgs, -1)
         print('Loaded image data', imgs.shape, poses[:, -1, 0])
 
-    return poses, bds, imgs, imgfiles, time_indices
+    return poses, bds, imgs, imgfiles, time_indices, time_max
 
 
 def normalize(x):
@@ -294,7 +296,7 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75,
     if out is None:
         return
     else:
-        poses, bds, imgs, imgfiles, time_indices = out
+        poses, bds, imgs, imgfiles, time_indices, time_max = out
 
     # print('Loaded', basedir, bds.min(), bds.max())
 
@@ -368,7 +370,7 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75,
     # print('HOLDOUT view is', i_test)
     poses = poses.astype(np.float32)
 
-    return images, poses, bds, render_poses, i_test, imgfiles, time_indices
+    return images, poses, bds, render_poses, i_test, imgfiles, time_indices, time_max
 
 
 if __name__ == '__main__':
