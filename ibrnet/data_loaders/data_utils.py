@@ -225,7 +225,7 @@ def batched_angular_dist_rot_matrix(R1, R2):
 
 def get_nearest_pose_ids(tar_time, ref_times,
                          tar_pose, ref_poses, num_select, tar_id=-1, angular_dist_method='vector',
-                         scene_center=(0, 0, 0)):
+                         scene_center=(0, 0, 0), is_preserve=False):
     '''
     Args:
         tar_pose: target pose [3, 3]
@@ -252,10 +252,13 @@ def get_nearest_pose_ids(tar_time, ref_times,
         dists = np.linalg.norm(tar_cam_locs - ref_cam_locs, axis=1)
     else:
         raise Exception('unknown angular distance calculation method!')
-
+    
     if tar_id >= 0:
         assert tar_id < num_cams
-        dists[tar_id] = 1e3  # make sure not to select the target id itself
+        if is_preserve:
+            dists[ref_times==(tar_time)] = 0
+        else:
+            dists[tar_id] = 1e3  # make sure not to select the target id itself
 
     # Manually add t+1, t-1
     dists[(ref_times==(tar_time+1)) | (ref_times==(tar_time-1))] = 0

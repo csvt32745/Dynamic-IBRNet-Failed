@@ -140,7 +140,6 @@ def _load_data(basedir, factor=None, width=None, height=None, load_imgs=True):
     imgfiles = [os.path.join(imgdir, f) for f in sorted(os.listdir(imgdir)) if
                 f.endswith('JPG') or f.endswith('jpg') or f.endswith('png')]
 
-    # TODO: get max time
     time_indices = [int(i.split('/')[-1].split('.')[-2]) for i in imgfiles]
     time_max = max(time_indices)
 
@@ -344,7 +343,13 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75,
         shrink_factor = .8
         zdelta = close_depth * .2
         tt = poses[:, :3, 3]  # ptstocam(poses[:3,3,:].T, c2w).T
+        # FIXME: rads too large?
         rads = np.percentile(np.abs(tt), 90, 0)
+        # rads = (np.abs(tt-c2w[np.newaxis, :3, 3]).mean(0)*0.5).tolist()
+        rads = [.5]*3
+        # print(rads)
+        
+
         c2w_path = c2w
         N_views = 120
         N_rots = 2

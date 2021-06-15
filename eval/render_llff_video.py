@@ -24,8 +24,8 @@ from ibrnet.render_image import render_single_image
 from ibrnet.model import IBRNetModel
 from utils import *
 from ibrnet.projection import Projector
-from ibrnet.data_loaders import get_nearest_pose_ids
-from ibrnet.data_loaders.llff_data_utils import load_llff_data, batch_parse_llff_poses
+from ibrnet.data_loaders import get_nearest_pose_ids, llff_test
+from ibrnet.data_loaders.llff_data_utils import load_llff_data, batch_parse_llff_poses, poses_avg
 import time
 
 
@@ -56,12 +56,14 @@ class LLFFRenderDataset(Dataset):
         for i, scene in enumerate(scenes):
             scene_path = os.path.join(self.folder_path, scene)
             _, poses, bds, render_poses, i_test, rgb_files, time_indices, time_max = load_llff_data(scene_path, load_imgs=False, factor=4)
+
             near_depth = np.min(bds)
             far_depth = np.max(bds)
             intrinsics, c2w_mats = batch_parse_llff_poses(poses)
             h, w = poses[0][:2, -1]
+            # FIXME
             render_intrinsics, render_c2w_mats = batch_parse_llff_poses(render_poses)
-
+            # render_intrinsics, render_c2w_mats = batch_parse_llff_poses(poses)
             i_test = [i_test]
             i_val = i_test
             i_train = np.array([i for i in np.arange(len(rgb_files)) if
@@ -74,9 +76,18 @@ class LLFFRenderDataset(Dataset):
             self.train_time_indices.append(np.array(time_indices)[i_train].tolist())
             
             num_render = len(render_intrinsics)
-            self.render_time_indices.extend(np.array(time_indices).tolist())
+            # num_render = len(time_indices)
+
+
+            self.render_time_indices.extend(np.array(time_indices).repeat(num_render//len(time_indices))[:num_render].tolist())
+            # self.render_time_indices.extend([0.0]*num_render)
+            print(self.render_time_indices)
+            # FIXME
             self.render_intrinsics.extend([intrinsics_ for intrinsics_ in render_intrinsics])
+            # self.render_intrinsics.extend([intrinsics[0]]*num_render)
             self.render_poses.extend([c2w_mat for c2w_mat in render_c2w_mats])
+            
+            # self.render_poses.extend([batch_parse_llff_poses(np.expand_dims(poses_avg(poses), 0))[1]]*num_render)
             self.render_depth_range.extend([[near_depth, far_depth]]*num_render)
             self.render_train_set_ids.extend([i]*num_render)
             self.h.extend([int(h)]*num_render)
@@ -135,7 +146,6 @@ class LLFFRenderDataset(Dataset):
                 'src_cameras': torch.from_numpy(src_cameras),
                 'depth_range': depth_range,
                 'src_time_indices': torch.from_numpy(src_time_indices)/time_max,
-                # 'time_max': time_max,
                 }
 
 
@@ -164,6 +174,8 @@ if __name__ == '__main__':
     os.makedirs(out_scene_dir, exist_ok=True)
 
     test_dataset = LLFFRenderDataset(args, scenes=args.eval_scenes)
+    # test_dataset = llff_test.LLFFTestDataset(args, 'validation',
+    #                                               scenes=args.eval_scenes)
     save_prefix = scene_name
     test_loader = DataLoader(test_dataset, batch_size=1)
     total_num = len(test_loader)
@@ -181,7 +193,8 @@ if __name__ == '__main__':
             ray_sampler = RaySamplerSingleImage(data, device='cuda:0')
             ray_batch = ray_sampler.get_all()
             ray_batch['src_time_indices'] = data['src_time_indices']
-            ray_batch['time_index'] = data['time_index']
+            # ray_batch['time_index'] = data['time_index']
+            ray_batch['time_index'] = torch.Tensor([10.])
 
             featmaps = model.feature_net(ray_batch['src_rgbs'].squeeze(0).permute(0, 3, 1, 2))
             ret = render_single_image(ray_sampler=ray_sampler,

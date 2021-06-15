@@ -19,41 +19,115 @@ import torch.nn.functional as F
 from copy import deepcopy
 
 from torch.nn.modules.batchnorm import BatchNorm1d
+
 torch._C._jit_set_profiling_executor(False)
 torch._C._jit_set_profiling_mode(False)
+
+class AdaIN(nn.Module):
+    def __init__(self, latent_dim, style_dim):
+        super().__init__()
+        self.tran = nn.Linear(style_dim, 2)
+    
+    def forward(self, x, t):
+        """
+        x: (N, latent_dim)
+        t: (N, style_dim)
+        """
+        style = self.tran(t)
+        mean = torch.mean(x, dim=-1, keepdim=True)
+        std = torch.std(x, dim=-1, keepdim=True)+1e-6
+        out = (x-mean) / std * style[:, [0]] + style[:, [1]]
+        return out
+    
+class DeformationNet(nn.Module):
+    def __init__(self, ch_pos, ch_time, n_dim, n_layer):
+        super().__init__()
+        self.act = nn.ReLU(True)
+
+        self.start = nn.Linear(ch_pos, n_dim)
+        self.linear = [nn.Linear(n_dim, n_dim) for i in range(n_layer-1)]
+        self.linear.append(nn.Linear(n_dim, 3))
+        self.linear = nn.ModuleList(self.linear)
+
+        self.adain = nn.ModuleList([AdaIN(n_dim, ch_time) for i in range(n_layer)])
+        self.n_layer = n_layer//2
+    
+    def forward(self, x, t, s):
+        """
+        x: (N, latent_dim)
+        t: (N, style_dim)
+        out: (N, 3)
+        """
+        out = self.start(x)
+        # t_in = torch.cat([t, s], -1)
+        for i in range(self.n_layer):
+            out = self.act(out)
+            out = self.adain[i](out, t)
+            out = self.linear[i](out)
+        for i in range(self.n_layer, self.n_layer+self.n_layer):
+            out = self.act(out)
+            out = self.adain[i](out, s)
+            out = self.linear[i](out)
+        return out
+
+class MLP(nn.Module):
+    def __init__(self, ch_pos, ch_time, n_dim, n_layer):
+        super().__init__()
+        ch_in = ch_pos+ch_time*2
+        self.net = [nn.Linear(ch_in, n_dim)]
+        for i in range(n_layer-1):
+            self.net += [
+                nn.ReLU(True),
+                # nn.BatchNorm1d(n_dim),
+                nn.Linear(n_dim, n_dim, bias=True)
+            ]
+        self.net += [
+            nn.ReLU(True),
+            # nn.BatchNorm1d(n_dim),
+            nn.Linear(n_dim, 3, bias=True)
+        ]
+        self.net = nn.Sequential(*self.net)
+    
+    def forward(self, x, t, s):
+        """
+        x: (N, latent_dim)
+        t: (N, style_dim)
+        out: (N, 3)
+        """
+        return self.net(torch.cat([x, t, s], -1))
+
 
 class DeformationModel(nn.Module):
     # Map (x, y, z, t0, t1) to (x', y', z', ...)
     
-    def __init__(self, ch_in=5, ch_out=3, n_size=96, n_layer=4, n_emb_pos=8, n_emb_time=2):
+    def __init__(self, n_dim=64, n_layer=6, n_emb_pos=8, n_emb_time=4):
         super().__init__()
-        # self.ch_in = n_emb_pos*3*2+n_emb_time*2*2 # x, y, z, t0, t1
-        self.ch_in = ch_in
-        self.deform = [
-            nn.Linear(self.ch_in, n_size),
-        ]
-        for i in range(n_layer):
-            self.deform += [
-                nn.ReLU(True),
-                nn.Linear(n_size, n_size)
-            ]
-        self.deform += [
-                nn.ReLU(True),
-                nn.Linear(n_size, ch_out)
-        ]
-        # self.deform_inv = deepcopy(self.deform)
-        
-        # from views to canonical frames and inversed
-        self.deform = nn.Sequential(*self.deform)
-        # self.deform_inv = nn.Sequential(*self.deform_inv)
-        
-        self.coef_pos = self.coef_table(n_emb_pos).cuda()
-        self.coef_time = self.coef_table(n_emb_time).cuda()
+        self.emb_time = 32
+        self.ch_pos = n_emb_pos*3*2
+        # self.ch_pos = 3
+        self.ch_time = n_emb_time*2
+        # self.ch_time = self.emb_time
+        self.deform = MLP(self.ch_pos, self.ch_time, n_dim, n_layer)
+        # self.emb_time_net = nn.Sequential(
+        #     nn.Linear(self.ch_time, self.emb_time),
+        #     nn.ReLU(True),
+        #     nn.Linear(self.emb_time, self.emb_time),
+        #     nn.ReLU(True),
+        # )
+        def weights_init(m):
+            if isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight.data)
+                # nn.init.constant_(m.weight.data, 0.01)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias.data)
+        self.deform.apply(weights_init)
+        self.coef_pos = self.coef_table(n_emb_pos, start=-4).cuda()
+        self.coef_time = self.coef_table(n_emb_time, start=0).cuda()
 
         self.crit_smooth = nn.SmoothL1Loss()
 
-    def coef_table(self, L):    
-        return  2**torch.arange(L)*np.pi
+    def coef_table(self, L, start=-4):
+        return 2**torch.arange(start, start+L)*np.pi
 
     def pos_enc(self, x, coef_table):
         """ 
@@ -83,39 +157,39 @@ class DeformationModel(nn.Module):
         tar = torch.full((*out_shape, 1), tar_time.item(), device='cuda')  # [N_sources, N_rays, N_samples, 1]
         src = torch.repeat_interleave(src_time.reshape(-1, 1).cuda(), original_shape[0]*original_shape[1], 1)
         # print(src_time.shape, src.shape, out_shape)
-        src = src.reshape(*out_shape, 1)
+        # src = src.reshape(*out_shape, 1)
         
-        # out
-        # tar = self.pos_enc(tar.reshape(-1, 1), self.coef_time)
-        tar = tar.reshape(-1, 1)
-        # src = self.pos_enc(src.reshape(-1, 1), self.coef_time)
-        src = src.reshape(-1, 1)
-        # dx = torch.cat([tar, src, self.pos_enc(xx.reshape(-1, 3), self.coef_pos)], -1) # [N_sources*N_rays*N_samples, 5]
-        dx = torch.cat([tar, src, xx.reshape(-1, 3)], -1) # [N_sources*N_rays*N_samples, 5]
-        dx = self.deform(dx).reshape(*out_shape, 3)
-        ret = xx+dx
 
+        # out
+        tar = self.pos_enc(tar.reshape(-1, 1), self.coef_time)
+        # tar = tar.reshape(-1, 1)
+        # tar = self.emb_time_net(tar)
+        src = self.pos_enc(src.reshape(-1, 1), self.coef_time)
+        # src = src.reshape(-1, 1)
+        # src = self.emb_time_net(src)
+        dx = self.deform(self.pos_enc(xx.reshape(-1, 3), self.coef_pos), tar, src).reshape(*out_shape, 3)
+        # dx = self.deform(xx.reshape(-1, 3), tar, src).reshape(*out_shape, 3)
+        ret = xx+dx
         if is_loss:            
             # Indentity loss
-            # ret_emb = self.pos_enc(ret.reshape(-1, 3), self.coef_pos)
-            ret_emb = ret.reshape(-1, 3)
-            # di0 = torch.cat([tar, tar, self.pos_enc(xx.reshape(-1, 3), self.coef_pos)], -1)
-            di0 = torch.cat([tar, tar, xx.reshape(-1, 3)], -1)
-            di0 = self.deform(di0)
-            di1 = torch.cat([src, src, ret_emb], -1)
-            di1 = self.deform(di1)
+            ret_emb = self.pos_enc(ret.reshape(-1, 3), self.coef_pos)
+            # ret_emb = ret.reshape(-1, 3)
+            di0 = self.deform(self.pos_enc(xx.reshape(-1, 3), self.coef_pos), tar, tar)
+            # di0 = self.deform(xx.reshape(-1, 3), tar, tar)
+            # di1 = torch.cat([src, src, ret_emb], -1)
+            di1 = self.deform(ret_emb, src, src)
             
             loss_i = torch.norm(di0, dim=-1).mean() + torch.norm(di1, dim=-1).mean()
 
             # bidirectional loss
-            dx_ = torch.cat([src, tar, ret_emb], -1)
-            dx_ = self.deform(dx_).reshape(*out_shape, 3)
+            # dx_ = torch.cat([src, tar, ret_emb], -1)
+            dx_ = self.deform(ret_emb, src, tar).reshape(*out_shape, 3)
             loss_bi = torch.norm(dx+dx_, dim=-1).mean()
             
             # smooth regularization
-            # smooth = torch.norm(dx, p=1, dim=-1).mean() + torch.norm(dx_, p=1, dim=-1).mean()
+            smooth = torch.norm(dx, p=1, dim=-1).mean() + torch.norm(dx_, p=1, dim=-1).mean()
             # smooth = self.crit_smooth(dx, torch.zeros_like(dx, device='cuda')) + self.crit_smooth(dx_, torch.zeros_like(dx_, device='cuda'))
-            return ret, loss_bi + loss_i
+            return ret, loss_bi + loss_i + smooth
 
         return ret
 
@@ -410,8 +484,16 @@ class IBRNet(nn.Module):
         x = torch.cat([x, vis, ray_diff], dim=-1)
         x = self.rgb_fc(x)
         x = x.masked_fill(mask == 0, -1e9)
+        # TODO: x*disoclusion
         blending_weights_valid = F.softmax(x, dim=2)  # color blending
-        rgb_out = torch.sum(rgb_in*blending_weights_valid, dim=2)
+        rgb_out = torch.sum(rgb_in*blending_weights_valid, dim=2) # sum of N views' colors
         out = torch.cat([rgb_out, sigma_out], dim=-1)
         return out
 
+if __name__ == '__main__':
+    a = DeformationModel()
+    a.load_state_dict(torch.load('/home/csvt32745/IBRNet/out/finetune_llff/model_290000_deform.pth'))
+    b = DeformationModel()
+    b.load_state_dict(torch.load('/home/csvt32745/IBRNet/out/finetune_llff/model_350000_deform.pth'))
+    print(((list(a.parameters())[0]-list(b.parameters())[0])**2).sum())
+    

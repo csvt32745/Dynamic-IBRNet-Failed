@@ -58,12 +58,13 @@ class IBRNetModel(object):
 
         if self.net_fine is not None:
             self.optimizer = torch.optim.Adam([
-                {'params': self.net_coarse.parameters()},
-                {'params': self.net_fine.parameters()},
-                {'params': self.feature_net.parameters(), 'lr': args.lrate_feature},
-                {'params': self.deform_net.parameters()},
+                # {'params': self.net_coarse.parameters()},
+                # {'params': self.net_fine.parameters()},
+                # {'params': self.feature_net.parameters(), 'lr': args.lrate_feature},
+                {'params': self.deform_net.parameters(), 'lr': args.lrate_deform},
                 ],
-                lr=args.lrate_mlp)
+                lr=args.lrate_deform)
+                # lr=args.lrate_mlp)
         else:
             self.optimizer = torch.optim.Adam([
                 {'params': self.net_coarse.parameters()},
@@ -149,6 +150,7 @@ class IBRNetModel(object):
             self.net_fine.load_state_dict(to_load['net_fine'])
         
         if load_deform:
+            print("load_deform...")
             sep = filename.rsplit('.', 1)
             sep = f"{sep[0]}_deform.{sep[1]}"
             self.deform_net.load_state_dict(torch.load(sep))

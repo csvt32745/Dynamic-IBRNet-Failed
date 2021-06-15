@@ -250,9 +250,9 @@ def render_rays(ray_batch,
         pts = z_vals.unsqueeze(2) * viewdirs + ray_o  # [N_rays, N_samples + N_importance, 3]
         
         if return_deform_loss:
-            deformed_pts, loss_d = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, True)
+            deformed_pts, loss_d = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, is_loss=True)
         else:
-            deformed_pts = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, False)
+            deformed_pts = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, is_loss=False)
 
         rgb_feat_sampled, ray_diff, mask = projector.compute(pts, deformed_pts,
                                                              ray_batch['camera'],
