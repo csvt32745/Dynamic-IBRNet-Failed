@@ -63,6 +63,11 @@ class RaySamplerSingleImage(object):
             if self.rgb is not None:
                 self.rgb = F.interpolate(self.rgb.permute(0, 3, 1, 2), scale_factor=resize_factor).permute(0, 2, 3, 1)
 
+        u, v = np.meshgrid(np.arange(self.W), np.arange(self.H))
+        u = u.reshape(-1).astype(dtype=np.float32)  # + 0.5    # add half pixel
+        v = v.reshape(-1).astype(dtype=np.float32)  # + 0.5
+        self.uv = torch.from_numpy(np.stack([u/(self.W-1), v/(self.H-1)]).T)
+
         self.rays_o, self.rays_d = self.get_rays_single_image(self.H, self.W, self.intrinsics, self.c2w_mat)
         if self.rgb is not None:
             self.rgb = self.rgb.reshape(-1, 3)
@@ -87,6 +92,7 @@ class RaySamplerSingleImage(object):
         u, v = np.meshgrid(np.arange(W)[::self.render_stride], np.arange(H)[::self.render_stride])
         u = u.reshape(-1).astype(dtype=np.float32)  # + 0.5    # add half pixel
         v = v.reshape(-1).astype(dtype=np.float32)  # + 0.5
+        
         pixels = np.stack((u, v, np.ones_like(u)), axis=0)  # (3, H*W)
         pixels = torch.from_numpy(pixels)
         batched_pixels = pixels.unsqueeze(0).repeat(self.batch_size, 1, 1)
@@ -152,6 +158,7 @@ class RaySamplerSingleImage(object):
                'rgb': rgb.cuda() if rgb is not None else None,
                'src_rgbs': self.src_rgbs.cuda() if self.src_rgbs is not None else None,
                'src_cameras': self.src_cameras.cuda() if self.src_cameras is not None else None,
-               'selected_inds': select_inds
+               'selected_inds': select_inds,
+               'uv': self.uv[select_inds].cuda(),
         }
         return ret

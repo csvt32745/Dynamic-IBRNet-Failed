@@ -36,6 +36,8 @@ import torch.distributed as dist
 from ibrnet.projection import Projector
 from ibrnet.data_loaders.create_training_dataset import create_training_dataset
 
+from RAFT import raft_helper
+
 
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
@@ -87,6 +89,8 @@ def train(args):
                                                shuffle=True if train_sampler is None else False)
 
     # create validation dataset
+    raft = raft_helper.load(args.raft_path)
+    
     val_dataset = dataset_dict[args.eval_dataset](args, 'validation',
                                                   scenes=args.eval_scenes)
 
@@ -94,7 +98,6 @@ def train(args):
     val_loader_iterator = iter(cycle(val_loader))
     # Create IBRNet model
     model = IBRNetModel(args, load_opt=not args.no_load_opt, load_scheduler=not args.no_load_scheduler, load_deform=not args.no_load_deform)
-
     # create projector
     projector = Projector(device=device)
 
@@ -125,10 +128,13 @@ def train(args):
                                                   sample_mode=args.sample_mode,
                                                   center_ratio=args.center_ratio,
                                                   )
-            # time_max = train_data['time_max']
+            
             ray_batch['src_time_indices'] = train_data['src_time_indices']
             ray_batch['time_index'] = train_data['time_index']
-            
+            # flows = train_data['optical_flows'][0].reshape(train_data['optical_flows'].shape[1], -1, 2) # (views, W*H, 2)
+            # ray_batch['optical_flows'] = flows[:, ray_batch['selected_inds']].unsqueeze(2) # (views, rays, 1, 2)
+            ray_batch['optical_flows'] = train_data['optical_flows'][0].permute(0, 3, 1, 2).cuda() # (views, 2, W, H)
+
             featmaps = model.feature_net(ray_batch['src_rgbs'].squeeze(0).permute(0, 3, 1, 2))
 
             ret = render_rays(ray_batch=ray_batch,
@@ -140,21 +146,25 @@ def train(args):
                               N_importance=args.N_importance,
                               det=args.det,
                               white_bkgd=args.white_bkgd,
-                              return_deform_loss=True)
+                              return_loss=True)
 
             # compute loss
             model.optimizer.zero_grad()
             loss, scalars_to_log = criterion(ret['outputs_coarse'], ray_batch, scalars_to_log)
-            loss += ret['outputs_coarse']['loss_d']
+            loss += (ret['outputs_coarse']['loss_d']*0.01 + ret['outputs_coarse']['loss_f'])
 
             if ret['outputs_fine'] is not None:
                 fine_loss, scalars_to_log = criterion(ret['outputs_fine'], ray_batch, scalars_to_log)
                 loss += fine_loss
-                loss += ret['outputs_fine']['loss_d']
+                loss += (ret['outputs_fine']['loss_d']*0.01 + ret['outputs_fine']['loss_f'])
 
 
             loss.backward()
             scalars_to_log['loss'] = loss.item()
+            scalars_to_log['detail/fine_loss_d'] = ret['outputs_fine']['loss_d'].item()
+            scalars_to_log['detail/coarse_loss_d'] = ret['outputs_coarse']['loss_d'].item()
+            scalars_to_log['detail/fine_loss_f'] = ret['outputs_fine']['loss_f'].item()
+            scalars_to_log['detail/coarse_loss_f'] = ret['outputs_coarse']['loss_f'].item()
             model.optimizer.step()
             model.scheduler.step()
 
