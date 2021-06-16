@@ -118,8 +118,8 @@ class DeformationModel(nn.Module):
         # )
         def weights_init(m):
             if isinstance(m, nn.Linear):
-                nn.init.kaiming_normal_(m.weight.data)
-                # nn.init.constant_(m.weight.data, 0.01)
+                # nn.init.kaiming_normal_(m.weight.data)
+                nn.init.constant_(m.weight.data, 0.01)
                 if m.bias is not None:
                     nn.init.zeros_(m.bias.data)
         self.deform.apply(weights_init)
@@ -128,7 +128,7 @@ class DeformationModel(nn.Module):
 
         self.crit_smooth = nn.SmoothL1Loss()
 
-    def coef_table(self, L, start=-4):
+    def coef_table(self, L, start=0):
         return 2**torch.arange(start, start+L)*np.pi
 
     def pos_enc(self, x, coef_table):
@@ -154,22 +154,28 @@ class DeformationModel(nn.Module):
         '''
         original_shape = x.shape[:2]
         N_sources = src_time.size(1)
-        xx = x.repeat((N_sources, 1, 1, 1)).cuda() # [N_sources, N_rays, N_samples, 3]
+        x = x.cuda()
+        xx = x.repeat((N_sources, 1, 1, 1)) # [N_sources, N_rays, N_samples, 3]
         out_shape = (N_sources, *original_shape) # (N_sources, N_rays, N_samples)
-        tar = torch.full((*out_shape, 1), tar_time.item(), device='cuda')  # [N_sources, N_rays, N_samples, 1]
-        src = torch.repeat_interleave(src_time.reshape(-1, 1).cuda(), original_shape[0]*original_shape[1], 1)
-        # print(src_time.shape, src.shape, out_shape)
+        # tar = torch.full((*out_shape, 1), tar_time.item(), device='cuda')  # [N_sources, N_rays, N_samples, 1]
+        tar = self.pos_enc(tar_time.float().reshape(1, 1).cuda(), self.coef_time).repeat(out_shape+(1, )).reshape(-1, self.ch_time)
+        src = torch.repeat_interleave(
+            self.pos_enc(src_time.reshape(-1, 1).cuda(), self.coef_time)
+            , original_shape[0]*original_shape[1], 0)
+        
         # src = src.reshape(*out_shape, 1)
         
 
         # out
-        tar = self.pos_enc(tar.reshape(-1, 1), self.coef_time)
+        # tar = self.pos_enc(tar.reshape(-1, 1), self.coef_time)
         # tar = tar.reshape(-1, 1)
         # tar = self.emb_time_net(tar)
-        src = self.pos_enc(src.reshape(-1, 1), self.coef_time)
+        # src = self.pos_enc(src.reshape(-1, 1), self.coef_time)
         # src = src.reshape(-1, 1)
         # src = self.emb_time_net(src)
-        dx, occ = self.deform(self.pos_enc(xx.reshape(-1, 3), self.coef_pos), tar, src)
+        x_emb = self.pos_enc(x, self.coef_pos).repeat((N_sources, 1, 1, 1)).reshape(-1, self.ch_pos)
+        dx, occ = self.deform(x_emb, tar, src)
+        
         dx = dx.reshape(*out_shape, 3)
         occ = occ.reshape(*out_shape, 1)
         # dx = self.deform(xx.reshape(-1, 3), tar, src).reshape(*out_shape, 3)
@@ -178,13 +184,14 @@ class DeformationModel(nn.Module):
             # Indentity loss
             ret_emb = self.pos_enc(ret.reshape(-1, 3), self.coef_pos)
             # ret_emb = ret.reshape(-1, 3)
-            di0, occ0 = self.deform(self.pos_enc(xx.reshape(-1, 3), self.coef_pos), tar, tar)
+            di0, occ0 = self.deform(x_emb, tar, tar)
             # di0 = self.deform(xx.reshape(-1, 3), tar, tar)
             # di1 = torch.cat([src, src, ret_emb], -1)
-            di1, occ1 = self.deform(ret_emb, src, src)
+            # di1, occ1 = self.deform(ret_emb, src, src)
             
-            loss_i = (torch.norm(di0, dim=-1)).mean() + (torch.norm(di1, dim=-1)).mean() \
-                + torch.norm(occ0-1).sum() + torch.norm(occ1-1).sum()
+            # loss_i = (torch.norm(di0, dim=-1)).mean() + (torch.norm(di1, dim=-1)).mean() \
+            #     + torch.norm(occ0-1).sum() + torch.norm(occ1-1).sum()
+            loss_i = (torch.norm(di0, dim=-1)).mean() + torch.norm(occ0-1).mean()
 
             # bidirectional loss
             # dx_ = torch.cat([src, tar, ret_emb], -1)
@@ -199,7 +206,7 @@ class DeformationModel(nn.Module):
 
             # non-trivial
             non_trivial = torch.norm(occ-1, p=1).sum() + torch.norm(occ0-1, p=1).sum()
-            return ret, occ, (loss_bi + loss_i + non_trivial)*0.1
+            return ret, occ, (loss_bi + loss_i + non_trivial)
             # return ret, occ, 0.
 
         return ret, occ
@@ -495,7 +502,7 @@ class IBRNet(nn.Module):
         x = torch.cat([x, vis, ray_diff], dim=-1)
         x = self.rgb_fc(x)
         x = x.masked_fill(mask == 0, -1e9)
-        # TODO: x*disoclusion
+        # CHECK: disoclusion
         blending_weights_valid = F.softmax(x*occ, dim=2)  # color blending
         rgb_out = torch.sum(rgb_in*blending_weights_valid, dim=2) # sum of N views' colors
         out = torch.cat([rgb_out, sigma_out], dim=-1)

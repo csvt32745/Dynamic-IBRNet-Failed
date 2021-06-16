@@ -46,6 +46,10 @@ def config_parser():
                         help='will load 1/N images from test/val sets, '
                              'useful for large datasets like deepvoxels or nerf_synthetic')
 
+     ## RAFT Optical Flow model
+    parser.add_argument("--raft_path", type=str, default="",
+                        help='specific weights file to reload for RAFT')
+
     ########## model options ##########
     ## ray sampling options
     parser.add_argument('--sample_mode', type=str, default='uniform',

@@ -146,7 +146,7 @@ class Projector():
         ray_diff = ray_diff.reshape((num_views, ) + original_shape + (4, ))
         return ray_diff
 
-    def compute(self, xyz, deformed_xyz, query_camera, train_imgs, train_cameras, featmaps):
+    def compute(self, xyz, deformed_xyz, query_camera, train_imgs, train_cameras, featmaps, return_coor=False):
         '''
         :param xyz: [n_rays, n_samples, 3]
         :param deformed_xyz: [n_views, n_rays, n_samples, 3]
@@ -189,6 +189,8 @@ class Projector():
         
         ray_diff = ray_diff.permute(1, 2, 0, 3)
         mask = (inbound * mask_in_front).float().permute(1, 2, 0)[..., None]   # [n_rays, n_samples, n_views, 1]
+        if return_coor:
+            return rgb_feat_sampled, ray_diff, mask, (normalized_pixel_locations+1.)*.5
         
         return rgb_feat_sampled, ray_diff, mask
 
