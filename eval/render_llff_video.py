@@ -193,8 +193,8 @@ if __name__ == '__main__':
             ray_sampler = RaySamplerSingleImage(data, device='cuda:0')
             ray_batch = ray_sampler.get_all()
             ray_batch['src_time_indices'] = data['src_time_indices']
-            # ray_batch['time_index'] = data['time_index']
-            ray_batch['time_index'] = torch.Tensor([10.])
+            ray_batch['time_index'] = data['time_index']
+            # ray_batch['time_index'] = torch.Tensor([10.])
 
             featmaps = model.feature_net(ray_batch['src_rgbs'].squeeze(0).permute(0, 3, 1, 2))
             ret = render_single_image(ray_sampler=ray_sampler,

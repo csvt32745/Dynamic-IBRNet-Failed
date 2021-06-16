@@ -84,7 +84,7 @@ class MLP(nn.Module):
         self.net += [
             nn.ReLU(True),
             # nn.BatchNorm1d(n_dim),
-            nn.Linear(n_dim, 3, bias=True)
+            nn.Linear(n_dim, 4, bias=True)
         ]
         self.net = nn.Sequential(*self.net)
     
@@ -94,13 +94,15 @@ class MLP(nn.Module):
         t: (N, style_dim)
         out: (N, 3)
         """
-        return self.net(torch.cat([x, t, s], -1))
+        ret, occ = self.net(torch.cat([x, t, s], -1)).split([3, 1], dim=-1)
+        occ = torch.sigmoid(occ)
+        return ret, occ
 
 
 class DeformationModel(nn.Module):
     # Map (x, y, z, t0, t1) to (x', y', z', ...)
     
-    def __init__(self, n_dim=64, n_layer=6, n_emb_pos=8, n_emb_time=4):
+    def __init__(self, n_dim=128, n_layer=6, n_emb_pos=8, n_emb_time=4):
         super().__init__()
         self.emb_time = 32
         self.ch_pos = n_emb_pos*3*2
@@ -167,31 +169,40 @@ class DeformationModel(nn.Module):
         src = self.pos_enc(src.reshape(-1, 1), self.coef_time)
         # src = src.reshape(-1, 1)
         # src = self.emb_time_net(src)
-        dx = self.deform(self.pos_enc(xx.reshape(-1, 3), self.coef_pos), tar, src).reshape(*out_shape, 3)
+        dx, occ = self.deform(self.pos_enc(xx.reshape(-1, 3), self.coef_pos), tar, src)
+        dx = dx.reshape(*out_shape, 3)
+        occ = occ.reshape(*out_shape, 1)
         # dx = self.deform(xx.reshape(-1, 3), tar, src).reshape(*out_shape, 3)
         ret = xx+dx
         if is_loss:            
             # Indentity loss
             ret_emb = self.pos_enc(ret.reshape(-1, 3), self.coef_pos)
             # ret_emb = ret.reshape(-1, 3)
-            di0 = self.deform(self.pos_enc(xx.reshape(-1, 3), self.coef_pos), tar, tar)
+            di0, occ0 = self.deform(self.pos_enc(xx.reshape(-1, 3), self.coef_pos), tar, tar)
             # di0 = self.deform(xx.reshape(-1, 3), tar, tar)
             # di1 = torch.cat([src, src, ret_emb], -1)
-            di1 = self.deform(ret_emb, src, src)
+            di1, occ1 = self.deform(ret_emb, src, src)
             
-            loss_i = torch.norm(di0, dim=-1).mean() + torch.norm(di1, dim=-1).mean()
+            loss_i = (torch.norm(di0, dim=-1)).mean() + (torch.norm(di1, dim=-1)).mean() \
+                + torch.norm(occ0-1).sum() + torch.norm(occ1-1).sum()
 
             # bidirectional loss
             # dx_ = torch.cat([src, tar, ret_emb], -1)
-            dx_ = self.deform(ret_emb, src, tar).reshape(*out_shape, 3)
-            loss_bi = torch.norm(dx+dx_, dim=-1).mean()
+            dx_, occ_ = self.deform(ret_emb, src, tar)
+            dx_ = dx_.reshape(*out_shape, 3)+dx
+            # occ_ = occ_.reshape(*out_shape, 1)
+            loss_bi = (occ.squeeze(-1)*torch.norm(dx+dx_, p=1, dim=-1)).mean()
             
             # smooth regularization
-            smooth = torch.norm(dx, p=1, dim=-1).mean() + torch.norm(dx_, p=1, dim=-1).mean()
+            # smooth = torch.norm(dx, p=1, dim=-1).mean() + torch.norm(dx_, p=1, dim=-1).mean()
             # smooth = self.crit_smooth(dx, torch.zeros_like(dx, device='cuda')) + self.crit_smooth(dx_, torch.zeros_like(dx_, device='cuda'))
-            return ret, loss_bi + loss_i + smooth
 
-        return ret
+            # non-trivial
+            non_trivial = torch.norm(occ-1, p=1).sum() + torch.norm(occ0-1, p=1).sum()
+            return ret, occ, (loss_bi + loss_i + non_trivial)*0.1
+            # return ret, occ, 0.
+
+        return ret, occ
 
     def forward_(self, tar_time, src_time, x, is_loss=False):
         # TODO: DeformationModel
@@ -435,7 +446,7 @@ class IBRNet(nn.Module):
         sinusoid_table = torch.from_numpy(sinusoid_table).to("cuda:{}".format(self.args.local_rank)).float().unsqueeze(0)
         return sinusoid_table
 
-    def forward(self, rgb_feat, ray_diff, mask):
+    def forward(self, rgb_feat, ray_diff, mask, occ):
         '''
         :param rgb_feat: rgbs and image features [n_rays, n_samples, n_views, n_feat]
         :param ray_diff: ray direction difference [n_rays, n_samples, n_views, 4], first 3 channels are directions,
@@ -485,15 +496,15 @@ class IBRNet(nn.Module):
         x = self.rgb_fc(x)
         x = x.masked_fill(mask == 0, -1e9)
         # TODO: x*disoclusion
-        blending_weights_valid = F.softmax(x, dim=2)  # color blending
+        blending_weights_valid = F.softmax(x*occ, dim=2)  # color blending
         rgb_out = torch.sum(rgb_in*blending_weights_valid, dim=2) # sum of N views' colors
         out = torch.cat([rgb_out, sigma_out], dim=-1)
         return out
 
 if __name__ == '__main__':
     a = DeformationModel()
-    a.load_state_dict(torch.load('/home/csvt32745/IBRNet/out/finetune_llff/model_290000_deform.pth'))
+    a.load_state_dict(torch.load('/home/csvt32745/IBRNet/out/finetune_llff/model_260000_deform.pth'))
     b = DeformationModel()
-    b.load_state_dict(torch.load('/home/csvt32745/IBRNet/out/finetune_llff/model_350000_deform.pth'))
+    b.load_state_dict(torch.load('/home/csvt32745/IBRNet/out/finetune_llff/model_285000_deform.pth'))
     print(((list(a.parameters())[0]-list(b.parameters())[0])**2).sum())
     

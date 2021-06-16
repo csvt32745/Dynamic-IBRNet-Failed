@@ -199,10 +199,10 @@ def render_rays(ray_batch,
 
     N_rays, N_samples = pts.shape[:2]
     if return_deform_loss:
-        deformed_pts, loss_d = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, is_loss=True)
+        deformed_pts, occ, loss_d = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, is_loss=True)
     else:
-        deformed_pts = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, is_loss=False)
-
+        deformed_pts, occ = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, is_loss=False)
+    occ = occ.permute([1, 2, 0, 3])
     rgb_feat, ray_diff, mask = projector.compute(pts, deformed_pts, 
                                                  ray_batch['camera'],
                                                  ray_batch['src_rgbs'],
@@ -210,7 +210,7 @@ def render_rays(ray_batch,
                                                  featmaps=featmaps[0],
                                                  )  # [N_rays, N_samples, N_views, x]
     pixel_mask = mask[..., 0].sum(dim=2) > 1   # [N_rays, N_samples], should at least have 2 observations
-    raw_coarse = model.net_coarse(rgb_feat, ray_diff, mask)   # [N_rays, N_samples, 4]
+    raw_coarse = model.net_coarse(rgb_feat, ray_diff, mask, occ)   # [N_rays, N_samples, 4]
     outputs_coarse = raw2outputs(raw_coarse, z_vals, pixel_mask,
                                  white_bkgd=white_bkgd)
 
@@ -250,9 +250,10 @@ def render_rays(ray_batch,
         pts = z_vals.unsqueeze(2) * viewdirs + ray_o  # [N_rays, N_samples + N_importance, 3]
         
         if return_deform_loss:
-            deformed_pts, loss_d = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, is_loss=True)
+            deformed_pts, occ, loss_d = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, is_loss=True)
         else:
-            deformed_pts = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, is_loss=False)
+            deformed_pts, occ = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, is_loss=False)
+        occ = occ.permute([1, 2, 0, 3])
 
         rgb_feat_sampled, ray_diff, mask = projector.compute(pts, deformed_pts,
                                                              ray_batch['camera'],
@@ -261,7 +262,7 @@ def render_rays(ray_batch,
                                                              featmaps=featmaps[1])
 
         pixel_mask = mask[..., 0].sum(dim=2) > 1  # [N_rays, N_samples]. should at least have 2 observations
-        raw_fine = model.net_fine(rgb_feat_sampled, ray_diff, mask)
+        raw_fine = model.net_fine(rgb_feat_sampled, ray_diff, mask, occ)
         outputs_fine = raw2outputs(raw_fine, z_vals, pixel_mask,
                                    white_bkgd=white_bkgd)
 
