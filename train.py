@@ -131,9 +131,10 @@ def train(args):
             
             ray_batch['src_time_indices'] = train_data['src_time_indices']
             ray_batch['time_index'] = train_data['time_index']
-            # flows = train_data['optical_flows'][0].reshape(train_data['optical_flows'].shape[1], -1, 2) # (views, W*H, 2)
-            # ray_batch['optical_flows'] = flows[:, ray_batch['selected_inds']].unsqueeze(2) # (views, rays, 1, 2)
-            ray_batch['optical_flows'] = train_data['optical_flows'][0].permute(0, 3, 1, 2).cuda() # (views, 2, W, H)
+            flows = train_data['optical_flows'][0].reshape(train_data['optical_flows'].shape[1], -1, 2) # (views, W*H, 2)
+            ray_batch['optical_flows'] = flows[:, ray_batch['selected_inds']].unsqueeze(2).cuda() # (views, rays, 1, 2)
+            
+            # ray_batch['optical_flows'] = train_data['optical_flows'][0].permute(0, 3, 1, 2).cuda() # (views, 2, W, H)
 
             featmaps = model.feature_net(ray_batch['src_rgbs'].squeeze(0).permute(0, 3, 1, 2))
 
@@ -150,13 +151,14 @@ def train(args):
 
             # compute loss
             model.optimizer.zero_grad()
-            loss, scalars_to_log = criterion(ret['outputs_coarse'], ray_batch, scalars_to_log)
-            loss += (ret['outputs_coarse']['loss_d']*0.01 + ret['outputs_coarse']['loss_f'])
+            coarse_loss, scalars_to_log = criterion(ret['outputs_coarse'], ray_batch, scalars_to_log)
+            loss = coarse_loss*20
+            loss += (ret['outputs_coarse']['loss_d']+ ret['outputs_coarse']['loss_f'])
 
             if ret['outputs_fine'] is not None:
                 fine_loss, scalars_to_log = criterion(ret['outputs_fine'], ray_batch, scalars_to_log)
-                loss += fine_loss
-                loss += (ret['outputs_fine']['loss_d']*0.01 + ret['outputs_fine']['loss_f'])
+                loss += fine_loss*20
+                loss += (ret['outputs_fine']['loss_d'] + ret['outputs_fine']['loss_f'])
 
 
             loss.backward()
@@ -165,6 +167,8 @@ def train(args):
             scalars_to_log['detail/coarse_loss_d'] = ret['outputs_coarse']['loss_d'].item()
             scalars_to_log['detail/fine_loss_f'] = ret['outputs_fine']['loss_f'].item()
             scalars_to_log['detail/coarse_loss_f'] = ret['outputs_coarse']['loss_f'].item()
+            # scalars_to_log['detail/fine_loss_L2'] = fine_loss.item()
+            # scalars_to_log['detail/coarse_loss_L2'] = coarse_loss.item()
             model.optimizer.step()
             model.scheduler.step()
 

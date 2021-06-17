@@ -190,7 +190,7 @@ class LLFFTestDataset(Dataset):
         src_rgbs = []
         src_cameras = []
         src_time_indices = train_time_indices[nearest_pose_ids.tolist()]
-        optical_flows = self.optical_flows[src_time_indices, time_index]
+        optical_flows = self.optical_flows[time_index, src_time_indices]
         for id in nearest_pose_ids:
             src_rgb = imageio.imread(train_rgb_files[id]).astype(np.float32)
             
@@ -202,6 +202,7 @@ class LLFFTestDataset(Dataset):
             img_size = src_rgb.shape[:2]
             src_camera = np.concatenate((list(img_size), train_intrinsics_.flatten(),
                                          train_pose.flatten())).astype(np.float32)
+            
             src_cameras.append(src_camera)
 
         src_rgbs = np.stack(src_rgbs, axis=0)
@@ -226,6 +227,5 @@ class LLFFTestDataset(Dataset):
                 'src_time_indices': torch.from_numpy(src_time_indices)/time_max,
                 'depth_range': depth_range,
                 'optical_flows': optical_flows
-                # TODO: src_flows
                 }
 

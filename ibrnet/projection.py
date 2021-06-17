@@ -192,9 +192,9 @@ class Projector():
         mask = (inbound * mask_in_front).float().permute(1, 2, 0)[..., None]   # [n_rays, n_samples, n_views, 1]
         
         if optical_flows is not None:
-            inv_flows = F.grid_sample(optical_flows, normalized_pixel_locations, align_corners=True).permute(0, 2, 3, 1)
+            # inv_flows = F.grid_sample(optical_flows, normalized_pixel_locations, align_corners=True).permute(0, 2, 3, 1)
             # [n_views, n_rays, n_samples, 2]
-            return rgb_feat_sampled, ray_diff, mask, (normalized_pixel_locations+1)*0.5, inv_flows
+            return rgb_feat_sampled, ray_diff, mask, (normalized_pixel_locations+1)*0.5
         
         return rgb_feat_sampled, ray_diff, mask
 
