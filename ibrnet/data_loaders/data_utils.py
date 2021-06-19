@@ -256,12 +256,16 @@ def get_nearest_pose_ids(tar_time, ref_times,
     if tar_id >= 0:
         assert tar_id < num_cams
         if is_preserve:
-            dists[ref_times==(tar_time)] = 0
+            dists[ref_times==(tar_time)] = 0.
         else:
             dists[tar_id] = 1e3  # make sure not to select the target id itself
 
     # Manually add t+1, t-1
-    dists[(ref_times==(tar_time+1)) | (ref_times==(tar_time-1))] = 0
+    sel = np.zeros_like(ref_times, dtype=bool)
+    for i in [-2, -1, 1, 2]:
+        sel |= (ref_times==(tar_time+i))
+    # dists[(ref_times==(tar_time+1)) | (ref_times==(tar_time-1))] = 0
+    dists[sel] = 0.
     
     sorted_ids = np.argsort(dists)
     selected_ids = sorted_ids[:num_select]
