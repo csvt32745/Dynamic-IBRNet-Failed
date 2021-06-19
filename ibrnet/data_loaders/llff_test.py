@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+from PIL.Image import LANCZOS
 import numpy as np
 import imageio
 from numpy.random import triangular
@@ -67,8 +68,11 @@ class LLFFTestDataset(Dataset):
             intrinsics, c2w_mats = batch_parse_llff_poses(poses)
 
             i_test = np.arange(poses.shape[0])[::self.args.llffhold]
-            i_train = np.array([j for j in np.arange(int(poses.shape[0])) if
-                                (j not in i_test and j not in i_test)])
+            # i_train = np.array([j for j in np.arange(int(poses.shape[0])) if
+            #                     (j not in i_test and j not in i_test)])
+            
+            # We need data of all times to train
+            i_train = np.arange(int(poses.shape[0]))
 
             if mode == 'train':
                 i_render = i_train
@@ -89,6 +93,7 @@ class LLFFTestDataset(Dataset):
             self.render_poses.extend([c2w_mat for c2w_mat in c2w_mats[i_render]])
             self.render_depth_range.extend([[near_depth, far_depth]]*num_render)
             self.render_train_set_ids.extend([i]*num_render)
+            
         self.train_time_indices = np.array(self.train_time_indices)
         self.render_time_indices = np.array(self.render_time_indices)
         self.time_indices = np.array(time_indices)
@@ -217,14 +222,14 @@ class LLFFTestDataset(Dataset):
                                                              (crop_h, crop_w))
 
         depth_range = torch.tensor([depth_range[0] * 0.9, depth_range[1] * 1.6])
-
+        norm = lambda x: (x*2.)-1.
         return {'rgb': torch.from_numpy(rgb[..., :3]),
-                'time_index': time_index/time_max,
+                'time_index': norm(time_index/time_max),
                 'camera': torch.from_numpy(camera),
                 'rgb_path': rgb_file,
                 'src_rgbs': torch.from_numpy(src_rgbs[..., :3]),
                 'src_cameras': torch.from_numpy(src_cameras),
-                'src_time_indices': torch.from_numpy(src_time_indices)/time_max,
+                'src_time_indices': norm(torch.from_numpy(src_time_indices)/time_max),
                 'depth_range': depth_range,
                 'optical_flows': optical_flows
                 }
