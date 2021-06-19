@@ -228,14 +228,14 @@ def render_rays(ray_batch,
             # print((ray_batch['optical_flows'].cuda() + ray_batch['uv'].cuda().reshape(1, -1, 1, 2) - pix_coor).reshape(-1, 2)[:40])
             # print(ray_batch['optical_flows'].shape, ray_batch['uv'].reshape(1, -1, 1, 2).shape, pix_coor.shape)
             # print((ray_batch['optical_flows'].cuda() + ray_batch['uv'].cuda().reshape(1, -1, 1, 2) - pix_coor).shape)
-            print(ray_batch['uv'].reshape(1, -1, 1, 2)[0, 0:10, 0])
+            # print(ray_batch['uv'].reshape(1, -1, 1, 2)[0, 0:10, 0])
             # print(ray_batch['optical_flows'][0, 0:10, 0])
-            print(pix_coor[0, 0:10, 0])
+            # print(pix_coor[0, 0:10, 0])
             # print(flow_mask[0, 0:10, 0])
             loss_flow = torch.norm(
-                (ray_batch['uv'].reshape(1, -1, 1, 2) + ray_batch['optical_flows'] - pix_coor)*flow_mask,
+                (ray_batch['uv'].reshape(1, -1, 1, 2) + ray_batch['optical_flows'] - pix_coor),
                     dim=-1
-                ).sum() / (flow_num)
+                ).mean()
             assert not torch.isnan(loss_flow).any(), loss_flow
     else:
         rgb_feat, ray_diff, mask = out
@@ -312,9 +312,9 @@ def render_rays(ray_batch,
                 # print((ray_batch['optical_flows'].cuda() + ray_batch['uv'].cuda().reshape(1, -1, 1, 2) - pix_coor).shape)
                 # assert False
                 loss_flow = torch.norm(
-                    (ray_batch['uv'].reshape(1, -1, 1, 2) + ray_batch['optical_flows'] - pix_coor)*flow_mask,
+                    (ray_batch['uv'].reshape(1, -1, 1, 2) + ray_batch['optical_flows'] - pix_coor),
                         p=1, dim=-1
-                    ).sum() / (flow_num)
+                    ).mean()
                 assert not torch.isnan(loss_flow).any(), loss_flow
         else:
             rgb_feat_sampled, ray_diff, mask = out
