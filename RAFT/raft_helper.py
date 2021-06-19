@@ -33,7 +33,7 @@ def get_flow(model, image1, image2):
     padder = InputPadder(image1.shape)
     image1, image2 = padder.pad(image1.cuda(), image2.cuda())
     with torch.no_grad():
-        flow_low, flow_up = model(image1, image2, iters=20, test_mode=True)
+        flow_low, flow_up = model(image1, image2, iters=32, test_mode=True)
         # [2, H_pad, W_pad]
         flow_up = flow_up[0].cpu()/torch.Tensor(list(flow_up[0].shape[1:])).float().reshape(2, 1, 1)
 

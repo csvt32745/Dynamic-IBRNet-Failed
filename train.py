@@ -111,6 +111,9 @@ def train(args):
 
     global_step = model.start_step + 1
     epoch = 0
+
+    weight_flow = args.weight_flow
+
     while global_step < model.start_step + args.n_iters + 1:
         np.random.seed()
         for train_data in train_loader:
@@ -152,13 +155,13 @@ def train(args):
             # compute loss
             model.optimizer.zero_grad()
             coarse_loss, scalars_to_log = criterion(ret['outputs_coarse'], ray_batch, scalars_to_log)
-            loss = coarse_loss*20
-            loss += (ret['outputs_coarse']['loss_d']+ ret['outputs_coarse']['loss_f'])
+            loss = coarse_loss*100.
+            loss += (ret['outputs_coarse']['loss_d']*1e-2+ ret['outputs_coarse']['loss_f']*weight_flow)
 
             if ret['outputs_fine'] is not None:
                 fine_loss, scalars_to_log = criterion(ret['outputs_fine'], ray_batch, scalars_to_log)
-                loss += fine_loss*20
-                loss += (ret['outputs_fine']['loss_d'] + ret['outputs_fine']['loss_f'])
+                loss += fine_loss*100.
+                loss += (ret['outputs_fine']['loss_d']*1e-2 + ret['outputs_fine']['loss_f']*weight_flow)
 
 
             loss.backward()
@@ -178,6 +181,9 @@ def train(args):
 
             # Rest is logging
             if args.local_rank == 0:
+                if global_step % args.weight_decay_steps == 0:
+                    weight_flow *= args.weight_decay_factor
+
                 if global_step % args.i_print == 0 or global_step < 10:
                     # write mse and psnr stats
                     mse_error = img2mse(ret['outputs_coarse']['rgb'], ray_batch['rgb']).item()
