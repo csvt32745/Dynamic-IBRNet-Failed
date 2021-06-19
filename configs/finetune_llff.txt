@@ -1,8 +1,8 @@
 ### INPUT
 expname = finetune_llff
 rootdir = /home/csvt32745/IBRNet/  # REPLACE THIS with YOUR PATH.
-ckpt_path = /home/csvt32745/IBRNet/pretrained/model_255000.pth  # REPLACE THIS with YOUR PATH.
-#ckpt_path = /home/csvt32745/IBRNet/out/finetune_llff/model_305000.pth  # REPLACE THIS with YOUR PATH.
+#ckpt_path = /home/csvt32745/IBRNet/pretrained/model_255000.pth  # REPLACE THIS with YOUR PATH.
+ckpt_path = /home/csvt32745/IBRNet/out/finetune_llff/model_280000.pth  # REPLACE THIS with YOUR PATH.
 
 raft_path = /home/csvt32745/IBRNet/RAFT/models/raft-things.pth
 
@@ -13,7 +13,7 @@ distributed = False
 no_load_opt = True
 no_load_scheduler = True 
     #
-no_load_deform = True
+#no_load_deform = True
 n_iters = 60000 # 30000
 
 ## dataset
@@ -24,13 +24,17 @@ eval_scenes = nvidia_data_full/Jumping
 
 ### TRAINING
 #return_deform_loss=True
-sample_mode = center
+#sample_mode = center
 N_rand = 500 #800
 lrate_feature = 0.0001 #0.0005
 lrate_mlp = 0.00005 #0.0002
-lrate_deform = 0.001
+lrate_deform = 0.00025
 lrate_decay_factor = 0.5
 lrate_decay_steps = 10000
+
+weight_flow = 1
+weight_decay_steps = 5000
+weight_decay_factor = .75
 
 ### TESTING
 chunk_size = 2000

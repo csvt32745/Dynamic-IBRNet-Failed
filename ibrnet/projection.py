@@ -146,7 +146,7 @@ class Projector():
         ray_diff = ray_diff.reshape((num_views, ) + original_shape + (4, ))
         return ray_diff
 
-    def compute(self, xyz, deformed_xyz, query_camera, train_imgs, train_cameras, featmaps, return_coor=False):
+    def compute(self, xyz, deformed_xyz, query_camera, train_imgs, train_cameras, featmaps, optical_flows=None):
         '''
         :param xyz: [n_rays, n_samples, 3]
         :param deformed_xyz: [n_views, n_rays, n_samples, 3]
@@ -154,6 +154,7 @@ class Projector():
         :param train_imgs: [1, n_views, h, w, 3]
         :param train_cameras: [1, n_views, 34]
         :param featmaps: [n_views, d, h, w]
+        :param optical_flows: [n_views, 2, w, h]
         :return: rgb_feat_sampled: [n_rays, n_samples, 3+n_feat],
                  ray_diff: [n_rays, n_samples, 4],
                  mask: [n_rays, n_samples, 1]
@@ -189,8 +190,11 @@ class Projector():
         
         ray_diff = ray_diff.permute(1, 2, 0, 3)
         mask = (inbound * mask_in_front).float().permute(1, 2, 0)[..., None]   # [n_rays, n_samples, n_views, 1]
-        if return_coor:
-            return rgb_feat_sampled, ray_diff, mask, (normalized_pixel_locations+1.)*.5
+        
+        if optical_flows is not None:
+            # inv_flows = F.grid_sample(optical_flows, normalized_pixel_locations, align_corners=True).permute(0, 2, 3, 1)
+            # [n_views, n_rays, n_samples, 2]
+            return rgb_feat_sampled, ray_diff, mask, (normalized_pixel_locations+1)*0.5
         
         return rgb_feat_sampled, ray_diff, mask
 

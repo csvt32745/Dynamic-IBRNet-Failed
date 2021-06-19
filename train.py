@@ -111,6 +111,9 @@ def train(args):
 
     global_step = model.start_step + 1
     epoch = 0
+
+    weight_flow = args.weight_flow
+
     while global_step < model.start_step + args.n_iters + 1:
         np.random.seed()
         for train_data in train_loader:
@@ -132,8 +135,10 @@ def train(args):
             ray_batch['src_time_indices'] = train_data['src_time_indices']
             ray_batch['time_index'] = train_data['time_index']
             flows = train_data['optical_flows'][0].reshape(train_data['optical_flows'].shape[1], -1, 2) # (views, W*H, 2)
-            ray_batch['optical_flows'] = flows[:, ray_batch['selected_inds']].unsqueeze(2) # (views, rays, 1, 2)
+            ray_batch['optical_flows'] = flows[:, ray_batch['selected_inds']].unsqueeze(2).cuda() # (views, rays, 1, 2)
             
+            # ray_batch['optical_flows'] = train_data['optical_flows'][0].permute(0, 3, 1, 2).cuda() # (views, 2, W, H)
+
             featmaps = model.feature_net(ray_batch['src_rgbs'].squeeze(0).permute(0, 3, 1, 2))
 
             ret = render_rays(ray_batch=ray_batch,
@@ -149,17 +154,24 @@ def train(args):
 
             # compute loss
             model.optimizer.zero_grad()
-            loss, scalars_to_log = criterion(ret['outputs_coarse'], ray_batch, scalars_to_log)
-            loss += ret['outputs_coarse']['loss_d']*.01
+            coarse_loss, scalars_to_log = criterion(ret['outputs_coarse'], ray_batch, scalars_to_log)
+            loss = coarse_loss*100.
+            loss += (ret['outputs_coarse']['loss_d']*1e-2+ ret['outputs_coarse']['loss_f']*weight_flow)
 
             if ret['outputs_fine'] is not None:
                 fine_loss, scalars_to_log = criterion(ret['outputs_fine'], ray_batch, scalars_to_log)
-                loss += fine_loss
-                loss += ret['outputs_fine']['loss_d']*.01
+                loss += fine_loss*100.
+                loss += (ret['outputs_fine']['loss_d']*1e-2 + ret['outputs_fine']['loss_f']*weight_flow)
 
 
             loss.backward()
             scalars_to_log['loss'] = loss.item()
+            scalars_to_log['detail/fine_loss_d'] = ret['outputs_fine']['loss_d'].item()
+            scalars_to_log['detail/coarse_loss_d'] = ret['outputs_coarse']['loss_d'].item()
+            scalars_to_log['detail/fine_loss_f'] = ret['outputs_fine']['loss_f'].item()
+            scalars_to_log['detail/coarse_loss_f'] = ret['outputs_coarse']['loss_f'].item()
+            # scalars_to_log['detail/fine_loss_L2'] = fine_loss.item()
+            # scalars_to_log['detail/coarse_loss_L2'] = coarse_loss.item()
             model.optimizer.step()
             model.scheduler.step()
 
@@ -169,6 +181,9 @@ def train(args):
 
             # Rest is logging
             if args.local_rank == 0:
+                if global_step % args.weight_decay_steps == 0:
+                    weight_flow *= args.weight_decay_factor
+
                 if global_step % args.i_print == 0 or global_step < 10:
                     # write mse and psnr stats
                     mse_error = img2mse(ret['outputs_coarse']['rgb'], ray_batch['rgb']).item()

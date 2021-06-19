@@ -159,6 +159,6 @@ class RaySamplerSingleImage(object):
                'src_rgbs': self.src_rgbs.cuda() if self.src_rgbs is not None else None,
                'src_cameras': self.src_cameras.cuda() if self.src_cameras is not None else None,
                'selected_inds': select_inds,
-               'uv': self.uv[select_inds],
+               'uv': self.uv[select_inds].cuda(),
         }
         return ret

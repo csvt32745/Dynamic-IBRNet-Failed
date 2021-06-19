@@ -55,7 +55,7 @@ class LLFFRenderDataset(Dataset):
 
         for i, scene in enumerate(scenes):
             scene_path = os.path.join(self.folder_path, scene)
-            _, poses, bds, render_poses, i_test, rgb_files, time_indices, time_max = load_llff_data(scene_path, load_imgs=False, factor=4)
+            _, poses, bds, render_poses, i_test, rgb_files, time_indices, time_max = load_llff_data(scene_path, load_imgs=False, factor=8)
 
             near_depth = np.min(bds)
             far_depth = np.max(bds)
@@ -66,8 +66,9 @@ class LLFFRenderDataset(Dataset):
             # render_intrinsics, render_c2w_mats = batch_parse_llff_poses(poses)
             i_test = [i_test]
             i_val = i_test
-            i_train = np.array([i for i in np.arange(len(rgb_files)) if
-                                (i not in i_test and i not in i_val)])
+            # i_train = np.array([i for i in np.arange(len(rgb_files)) if
+            #                     (i not in i_test and i not in i_val)])
+            i_train = np.arange(len(rgb_files))
 
             self.time_max.append(time_max)
             self.train_intrinsics.append(intrinsics[i_train])
@@ -75,8 +76,8 @@ class LLFFRenderDataset(Dataset):
             self.train_rgb_files.append(np.array(rgb_files)[i_train].tolist())
             self.train_time_indices.append(np.array(time_indices)[i_train].tolist())
             
-            num_render = len(render_intrinsics)
-            # num_render = len(time_indices)
+            # num_render = len(render_intrinsics)
+            num_render = len(time_indices)*2
 
 
             self.render_time_indices.extend(np.array(time_indices).repeat(num_render//len(time_indices))[:num_render].tolist())
@@ -85,9 +86,11 @@ class LLFFRenderDataset(Dataset):
             # FIXME
             self.render_intrinsics.extend([intrinsics_ for intrinsics_ in render_intrinsics])
             # self.render_intrinsics.extend([intrinsics[0]]*num_render)
+
             self.render_poses.extend([c2w_mat for c2w_mat in render_c2w_mats])
-            
+            # self.render_poses.extend([c2w_mats[0]]*num_render)
             # self.render_poses.extend([batch_parse_llff_poses(np.expand_dims(poses_avg(poses), 0))[1]]*num_render)
+
             self.render_depth_range.extend([[near_depth, far_depth]]*num_render)
             self.render_train_set_ids.extend([i]*num_render)
             self.h.extend([int(h)]*num_render)

@@ -70,21 +70,46 @@ class DeformationNet(nn.Module):
             out = self.linear[i](out)
         return out
 
+class ResMLP(nn.Module):
+    def __init__(self, ch_pos, ch_time, n_dim, n_layer):
+        super().__init__()
+        ch_in = ch_pos+ch_time*2
+        self.act = nn.ReLU(True)
+        self.start = nn.Linear(ch_in, n_dim)
+        self.mid = nn.ModuleList( [nn.Sequential(
+            nn.Linear(n_dim, n_dim, bias=True),
+            self.act,
+            nn.Linear(n_dim, n_dim, bias=True),
+            ) for i in range(n_layer-1)])
+        self.end = nn.Linear(n_dim, 4, bias=True)
+        self.scale = 1./np.sqrt(2)
+    
+    def forward(self, x, t, s):
+        """
+        x: (N, latent_dim)
+        t: (N, style_dim)
+        out: (N, 3)
+        """
+        out = self.act(self.start(torch.cat([x, t, s], -1)))
+        for m in self.mid:
+            out = self.act((m(out) + out)*self.scale)
+        out, occ = self.end(out).split([3, 1], dim=-1)
+        occ = torch.sigmoid(occ)
+        return out, occ
+
 class MLP(nn.Module):
     def __init__(self, ch_pos, ch_time, n_dim, n_layer):
         super().__init__()
         ch_in = ch_pos+ch_time*2
-        self.net = [nn.Linear(ch_in, n_dim)]
+        self.net = [nn.Linear(ch_in, n_dim), nn.ReLU(True)]
         for i in range(n_layer-1):
             self.net += [
-                nn.ReLU(True),
-                # nn.BatchNorm1d(n_dim),
-                nn.Linear(n_dim, n_dim, bias=True)
+                nn.Linear(n_dim, n_dim, bias=True),
+                nn.ReLU(True)
             ]
         self.net += [
-            nn.ReLU(True),
-            # nn.BatchNorm1d(n_dim),
             nn.Linear(n_dim, 4, bias=True)
+            # nn.Linear(n_dim, 3, bias=True)
         ]
         self.net = nn.Sequential(*self.net)
     
@@ -95,6 +120,7 @@ class MLP(nn.Module):
         out: (N, 3)
         """
         ret, occ = self.net(torch.cat([x, t, s], -1)).split([3, 1], dim=-1)
+        # ret = self.net(torch.cat([x, t, s], -1))
         occ = torch.sigmoid(occ)
         return ret, occ
 
@@ -102,14 +128,14 @@ class MLP(nn.Module):
 class DeformationModel(nn.Module):
     # Map (x, y, z, t0, t1) to (x', y', z', ...)
     
-    def __init__(self, n_dim=128, n_layer=6, n_emb_pos=8, n_emb_time=4):
+    def __init__(self, n_dim=128, n_layer=4, n_emb_pos=6, n_emb_time=4):
         super().__init__()
         self.emb_time = 32
         self.ch_pos = n_emb_pos*3*2
         # self.ch_pos = 3
         self.ch_time = n_emb_time*2
         # self.ch_time = self.emb_time
-        self.deform = MLP(self.ch_pos, self.ch_time, n_dim, n_layer)
+        self.deform = ResMLP(self.ch_pos, self.ch_time, n_dim, n_layer)
         # self.emb_time_net = nn.Sequential(
         #     nn.Linear(self.ch_time, self.emb_time),
         #     nn.ReLU(True),
@@ -125,7 +151,7 @@ class DeformationModel(nn.Module):
         self.deform.apply(weights_init)
         self.coef_pos = self.coef_table(n_emb_pos, start=-4).cuda()
         self.coef_time = self.coef_table(n_emb_time, start=0).cuda()
-
+        self.rand_var = 0.2**0.5
         self.crit_smooth = nn.SmoothL1Loss()
 
     def coef_table(self, L, start=0):
@@ -174,14 +200,14 @@ class DeformationModel(nn.Module):
         # src = src.reshape(-1, 1)
         # src = self.emb_time_net(src)
         x_emb = self.pos_enc(x, self.coef_pos).repeat((N_sources, 1, 1, 1)).reshape(-1, self.ch_pos)
+        # x_emb = xx.reshape(-1, 3)
         dx, occ = self.deform(x_emb, tar, src)
         
         dx = dx.reshape(*out_shape, 3)
         occ = occ.reshape(*out_shape, 1)
-        # dx = self.deform(xx.reshape(-1, 3), tar, src).reshape(*out_shape, 3)
         ret = xx+dx
         if is_loss:            
-            # Indentity loss
+            # =============== Indentity loss
             ret_emb = self.pos_enc(ret.reshape(-1, 3), self.coef_pos)
             # ret_emb = ret.reshape(-1, 3)
             di0, occ0 = self.deform(x_emb, tar, tar)
@@ -192,21 +218,37 @@ class DeformationModel(nn.Module):
             # loss_i = (torch.norm(di0, dim=-1)).mean() + (torch.norm(di1, dim=-1)).mean() \
             #     + torch.norm(occ0-1).sum() + torch.norm(occ1-1).sum()
             loss_i = (torch.norm(di0, dim=-1)).mean() + torch.norm(occ0-1).mean()
+            # loss_i = (torch.norm(di0, dim=-1)).mean()
 
-            # bidirectional loss
+            # =============== bidirectional loss
             # dx_ = torch.cat([src, tar, ret_emb], -1)
             dx_, occ_ = self.deform(ret_emb, src, tar)
             dx_ = dx_.reshape(*out_shape, 3)+dx
             # occ_ = occ_.reshape(*out_shape, 1)
-            loss_bi = (occ.squeeze(-1)*torch.norm(dx+dx_, p=1, dim=-1)).mean()
+            # loss_bi = (occ.squeeze(-1)*torch.norm(dx+dx_, p=1, dim=-1)).mean()
+            loss_bi = (torch.norm(dx+dx_, p=1, dim=-1)).mean()
             
-            # smooth regularization
-            # smooth = torch.norm(dx, p=1, dim=-1).mean() + torch.norm(dx_, p=1, dim=-1).mean()
+            # =============== L1 smooth regularization
+            smooth = torch.norm(dx, p=1, dim=-1).mean() + torch.norm(dx_, p=1, dim=-1).mean()
             # smooth = self.crit_smooth(dx, torch.zeros_like(dx, device='cuda')) + self.crit_smooth(dx_, torch.zeros_like(dx_, device='cuda'))
 
-            # non-trivial
-            non_trivial = torch.norm(occ-1, p=1).sum() + torch.norm(occ0-1, p=1).sum()
-            return ret, occ, (loss_bi + loss_i + non_trivial)
+            # =============== Neighbor L1 smooth regularization
+            rd = torch.randn_like(xx, device='cuda')
+            nb_x = self.pos_enc(rd + xx, self.coef_pos).reshape(-1, self.ch_pos)
+            # nb_x = xx.reshape(-1, 3)
+            dx_nb, occ_ = self.deform(nb_x, tar, src)
+            dist = torch.exp(-2*torch.norm(rd, dim=-1))
+            smooth_nb = (torch.norm(dx_nb.reshape(*out_shape, 3)-dx, p=1, dim=-1)*
+                dist).sum()/dist.sum()
+            
+            # =============== non-trivial disocclusion
+            non_trivial = torch.norm(occ-1, p=1, dim=-1).mean() + torch.norm(occ0-1, p=1, dim=-1).mean()
+            
+            # =============== return
+            # return ret, 0, (loss_bi*0.1 + loss_i)
+            # print(loss_bi , loss_i , non_trivial , smooth, smooth_nb)
+            # assert False
+            return ret, occ, (loss_bi + loss_i*0.01 + non_trivial + smooth + smooth_nb*10)
             # return ret, occ, 0.
 
         return ret, occ
@@ -500,18 +542,28 @@ class IBRNet(nn.Module):
 
         # rgb computation
         x = torch.cat([x, vis, ray_diff], dim=-1)
-        x = self.rgb_fc(x)
-        x = x.masked_fill(mask == 0, -1e9)
         # CHECK: disoclusion
-        blending_weights_valid = F.softmax(x*occ, dim=2)  # color blending
+        x = self.rgb_fc(x)*occ
+        x = x.masked_fill(mask == 0, -1e9)
+        # blending_weights_valid = F.softmax(x, dim=2)  # color blending
+        blending_weights_valid = F.softmax(x, dim=2)  # color blending
         rgb_out = torch.sum(rgb_in*blending_weights_valid, dim=2) # sum of N views' colors
         out = torch.cat([rgb_out, sigma_out], dim=-1)
         return out
 
 if __name__ == '__main__':
     a = DeformationModel()
-    a.load_state_dict(torch.load('/home/csvt32745/IBRNet/out/finetune_llff/model_260000_deform.pth'))
+    a.load_state_dict(torch.load('/home/csvt32745/IBRNet/out/finetune_llff/model_270000_deform.pth'))
+
     b = DeformationModel()
-    b.load_state_dict(torch.load('/home/csvt32745/IBRNet/out/finetune_llff/model_285000_deform.pth'))
-    print(((list(a.parameters())[0]-list(b.parameters())[0])**2).sum())
+    b.load_state_dict(torch.load('/home/csvt32745/IBRNet/out/finetune_llff/model_275000_deform.pth'))
+
+    pa = list(a.named_parameters())
+    pb = list(b.named_parameters())
+    print(len(a.deform.mid))
+    # print(len(list(a.deform.mid.named_parameters())))
+    # print([m[0] for m in a.deform.mid[0].named_parameters()])
+    # print(len(list(a.named_parameters())))
+    for aa, bb in zip(pa, pb):
+        print(f"{aa[0]}:\t{torch.sum((aa[1]-bb[1])**2).item()}")
     
