@@ -56,14 +56,13 @@ class LLFFRenderDataset(Dataset):
         for i, scene in enumerate(scenes):
             scene_path = os.path.join(self.folder_path, scene)
             _, poses, bds, render_poses, i_test, rgb_files, time_indices, time_max = load_llff_data(scene_path, load_imgs=False, factor=8)
-
             near_depth = np.min(bds)
             far_depth = np.max(bds)
             intrinsics, c2w_mats = batch_parse_llff_poses(poses)
             h, w = poses[0][:2, -1]
             # FIXME
-            # render_intrinsics, render_c2w_mats = batch_parse_llff_poses(render_poses)
-            render_intrinsics, render_c2w_mats = batch_parse_llff_poses(poses)
+            render_intrinsics, render_c2w_mats = batch_parse_llff_poses(render_poses)
+            # render_intrinsics, render_c2w_mats = batch_parse_llff_poses(poses)
             i_test = [i_test]
             i_val = i_test
             # i_train = np.array([i for i in np.arange(len(rgb_files)) if
@@ -77,18 +76,18 @@ class LLFFRenderDataset(Dataset):
             self.train_time_indices.append(np.array(time_indices)[i_train].tolist())
             
             num_render = len(render_intrinsics)
-            num_render = len(time_indices)
+            # num_render = len(time_indices)*2
 
 
             self.render_time_indices.extend(np.array(time_indices).repeat(num_render//len(time_indices))[:num_render].tolist())
-            # self.render_time_indices.extend([0.]*num_render)
+            # self.render_time_indices.extend([9.]*num_render)
             print(self.render_time_indices)
             # FIXME
-            # self.render_intrinsics.extend([intrinsics_ for intrinsics_ in render_intrinsics])
-            # self.render_poses.extend([c2w_mat for c2w_mat in render_c2w_mats])
+            self.render_intrinsics.extend([intrinsics_ for intrinsics_ in render_intrinsics])
+            self.render_poses.extend([c2w_mat for c2w_mat in render_c2w_mats])
 
-            self.render_intrinsics.extend([intrinsics[0]]*num_render)
-            self.render_poses.extend([c2w_mats[0]]*num_render)
+            # self.render_intrinsics.extend([intrinsics[0]]*num_render)
+            # self.render_poses.extend([c2w_mats[0]]*num_render)
             # self.render_poses.extend([batch_parse_llff_poses(np.expand_dims(poses_avg(poses), 0))[1]]*num_render)
 
             self.render_depth_range.extend([[near_depth, far_depth]]*num_render)
@@ -203,18 +202,21 @@ if __name__ == '__main__':
 
             featmaps = model.feature_net(ray_batch['src_rgbs'].squeeze(0).permute(0, 3, 1, 2))
             ret = render_single_image(ray_sampler=ray_sampler,
-                                      ray_batch=ray_batch,
-                                      model=model,
-                                      projector=projector,
-                                      chunk_size=args.chunk_size,
-                                      det=True,
-                                      N_samples=args.N_samples,
-                                      inv_uniform=args.inv_uniform,
-                                      N_importance=args.N_importance,
-                                      white_bkgd=args.white_bkgd,
-                                      featmaps=featmaps)
+                                        ray_batch=ray_batch,
+                                        model=model,
+                                        projector=projector,
+                                        chunk_size=args.chunk_size,
+                                        det=True,
+                                        N_samples=args.N_samples,
+                                        inv_uniform=args.inv_uniform,
+                                        N_importance=args.N_importance,
+                                        white_bkgd=args.white_bkgd,
+                                        featmaps=featmaps)
+            
             torch.cuda.empty_cache()
+        # 
 
+        
         coarse_pred_rgb = ret['outputs_coarse']['rgb'].detach().cpu()
         coarse_pred_rgb = (255 * np.clip(coarse_pred_rgb.numpy(), a_min=0, a_max=1.)).astype(np.uint8)
         imageio.imwrite(os.path.join(out_scene_dir, '{}_pred_coarse.png'.format(i)), coarse_pred_rgb)

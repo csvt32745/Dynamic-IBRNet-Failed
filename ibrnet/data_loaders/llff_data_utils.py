@@ -344,9 +344,9 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75,
         zdelta = close_depth * .2
         tt = poses[:, :3, 3]  # ptstocam(poses[:3,3,:].T, c2w).T
         # FIXME: rads too large?
-        rads = np.percentile(np.abs(tt), 90, 0)
+        rads = np.percentile(np.abs(tt), 90, 0)*0.1
         # rads = (np.abs(tt-c2w[np.newaxis, :3, 3]).mean(0)*0.5).tolist()
-        rads = [.5]*3
+        # rads = [.5]*3
         # print(rads)
         
 

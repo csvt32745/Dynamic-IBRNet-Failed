@@ -189,8 +189,10 @@ class LLFFTestDataset(Dataset):
 
         assert id_render not in nearest_pose_ids
         # occasionally include input image
-        if np.random.choice([0, 1], p=[0.995, 0.005]) and self.mode == 'train':
-            nearest_pose_ids[np.random.choice(len(nearest_pose_ids))] = id_render
+        if np.random.choice([0, 1], p=[0.9, 0.1]) and self.mode == 'train':
+            nearest_pose_ids[-1] = id_render
+            # nearest_pose_ids[np.random.choice(len(nearest_pose_ids))] = id_render
+            # nearest_pose_ids = np.array(nearest_pose_ids.tolist() + [id_render])
 
         src_rgbs = []
         src_cameras = []

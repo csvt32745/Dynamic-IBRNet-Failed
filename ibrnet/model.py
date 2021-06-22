@@ -57,14 +57,16 @@ class IBRNetModel(object):
             learnable_params += list(self.net_fine.parameters())
 
         if self.net_fine is not None:
-            self.optimizer = torch.optim.Adam([
+            self.optimizer = torch.optim.AdamW([
                 # {'params': self.net_coarse.parameters()},
                 # {'params': self.net_fine.parameters()},
+                # {'params': self.net_coarse.rgb_fc.parameters()},
+                # {'params': self.net_fine.rgb_fc.parameters()},
                 # {'params': self.feature_net.parameters(), 'lr': args.lrate_feature},
                 {'params': self.deform_net.parameters(), 'lr': args.lrate_deform},
                 ],
-                lr=args.lrate_deform)
-                # lr=args.lrate_mlp)
+                # lr=args.lrate_deform)
+                lr=args.lrate_mlp)
         else:
             self.optimizer = torch.optim.Adam([
                 {'params': self.net_coarse.parameters()},

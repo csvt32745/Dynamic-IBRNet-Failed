@@ -16,6 +16,7 @@
 import torch
 from collections import OrderedDict
 from ibrnet.render_ray import render_rays
+from torchviz import make_dot
 
 
 def render_single_image(ray_sampler,
@@ -62,7 +63,9 @@ def render_single_image(ray_sampler,
                           N_importance=N_importance,
                           det=det,
                           white_bkgd=white_bkgd)
-
+        
+        # make_dot(ret['outputs_coarse']['rgb']).render("rnn_torchviz", format="png")
+        # assert False
         # remove loss term
         # ret['outputs_coarse'].pop('loss_d', None)
         # ret['outputs_fine'].pop('loss_d', None)

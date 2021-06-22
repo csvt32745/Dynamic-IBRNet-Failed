@@ -173,12 +173,13 @@ class Projector():
 
         # compute the projection of the query points to each reference image
         pixel_locations, mask_in_front = self.compute_projections_respectively(deformed_xyz, train_cameras)
+        # print(pixel_locations[0])
         normalized_pixel_locations = self.normalize(pixel_locations, h, w)   # [n_views, n_rays, n_samples, 2]
         
         # rgb sampling
         rgbs_sampled = F.grid_sample(train_imgs, normalized_pixel_locations, align_corners=True)
         rgb_sampled = rgbs_sampled.permute(2, 3, 0, 1)  # [n_rays, n_samples, n_views, 3]
-
+        
         # deep feature sampling
         feat_sampled = F.grid_sample(featmaps, normalized_pixel_locations, align_corners=True)
         feat_sampled = feat_sampled.permute(2, 3, 0, 1)  # [n_rays, n_samples, n_views, d]

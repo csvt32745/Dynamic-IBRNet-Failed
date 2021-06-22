@@ -1,12 +1,15 @@
 ### INPUT
 expname = eval_llff
 rootdir = /home/csvt32745/IBRNet/  # REPLACE THIS with YOUR PATH.
-ckpt_path = /home/csvt32745/IBRNet/out/finetune_llff/model_285000.pth
+ckpt_path = /home/csvt32745/IBRNet/out/finetune_llff/model_265000.pth
 distributed = False
 
 ## dataset
 eval_dataset = nvidia_data_full
 eval_scenes = nvidia_data_full/Jumping
+#eval_scenes = nvidia_data_full/Balloon1-2
+#eval_scenes = nvidia_data_full/Umbrella
+
 
 ### TESTING
 chunk_size = 2048

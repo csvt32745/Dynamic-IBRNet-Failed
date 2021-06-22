@@ -155,13 +155,13 @@ def train(args):
             # compute loss
             model.optimizer.zero_grad()
             coarse_loss, scalars_to_log = criterion(ret['outputs_coarse'], ray_batch, scalars_to_log)
-            loss = coarse_loss*100.
-            loss += (ret['outputs_coarse']['loss_d']*1e-2+ ret['outputs_coarse']['loss_f']*weight_flow)
+            loss = coarse_loss*200.
+            loss += ret['outputs_coarse']['loss_d']*1e-2+ ret['outputs_coarse']['loss_f']*weight_flow
 
             if ret['outputs_fine'] is not None:
                 fine_loss, scalars_to_log = criterion(ret['outputs_fine'], ray_batch, scalars_to_log)
-                loss += fine_loss*100.
-                loss += (ret['outputs_fine']['loss_d']*1e-2 + ret['outputs_fine']['loss_f']*weight_flow)
+                loss += fine_loss*200.
+                loss += ret['outputs_fine']['loss_d']*1e-2 + ret['outputs_fine']['loss_f']*weight_flow
 
 
             loss.backward()
