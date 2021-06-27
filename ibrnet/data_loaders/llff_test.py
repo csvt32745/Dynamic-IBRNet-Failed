@@ -61,7 +61,8 @@ class LLFFTestDataset(Dataset):
         for i, scene in enumerate(scenes):
             scene_path = os.path.join(self.folder_path, scene)
             # FIXME: factor=4
-            _, poses, bds, render_poses, i_test, rgb_files, time_indices, time_max = load_llff_data(scene_path, load_imgs=False, factor=8)
+            _, poses, bds, render_poses, i_test, rgb_files, time_indices, render_time, time_max = load_llff_data(
+                scene_path, load_imgs=False, factor=8)
             
             near_depth = np.min(bds)
             far_depth = np.max(bds)
@@ -233,6 +234,7 @@ class LLFFTestDataset(Dataset):
                 'src_cameras': torch.from_numpy(src_cameras),
                 'src_time_indices': norm(torch.from_numpy(src_time_indices)/time_max),
                 'depth_range': depth_range,
-                'optical_flows': optical_flows
+                'optical_flows': optical_flows,
+                'time_max': time_max,
                 }
 

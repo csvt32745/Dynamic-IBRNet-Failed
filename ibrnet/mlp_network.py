@@ -73,6 +73,7 @@ class DeformationNet(nn.Module):
         occ = torch.sigmoid(occ)
         return out, occ
 
+import torch.nn.utils.spectral_norm as SN
 class ResMLP(nn.Module):
     def __init__(self, ch_pos, ch_time, n_dim, n_layer):
         super().__init__()
@@ -81,21 +82,23 @@ class ResMLP(nn.Module):
         self.act1 = nn.ReLU()
         self.start = nn.Linear(ch_in, n_dim)
         n_mid = n_layer//2
+        wrap = lambda x: x
         self.mid = nn.ModuleList( [nn.Sequential(
-            nn.Linear(n_dim, n_dim, bias=True),
+            wrap(nn.Linear(n_dim, n_dim, bias=True)),
             self.act,
-            nn.Linear(n_dim, n_dim, bias=True),
-            ) for i in range(n_layer)])
-        # self.inject = nn.Linear(n_dim+ch_time*2, n_dim, bias=True)
-        # self.mid2 = nn.ModuleList( [nn.Sequential(
-        #     nn.Linear(n_dim, n_dim, bias=True),
-        #     self.act,
-        #     nn.Linear(n_dim, n_dim, bias=True),
-        #     ) for i in range(n_mid-1)])
-        self.end = nn.Linear(n_dim, 4, bias=True)
+            wrap(nn.Linear(n_dim, n_dim, bias=True)),
+            ) for i in range(n_mid)])
+        # self.inject = (nn.Linear(n_dim+ch_time*2, n_dim, bias=True))
+        self.inject = AdaIN(n_dim, ch_time*2)
+        self.mid2 = nn.ModuleList( [nn.Sequential(
+            wrap(nn.Linear(n_dim, n_dim, bias=True)),
+            self.act,
+            wrap(nn.Linear(n_dim, n_dim, bias=True)),
+            ) for i in range(n_mid-1)])
+        self.end = (nn.Linear(n_dim, 4, bias=True))
         self.scale = 1./np.sqrt(2)
     
-    def forward(self, x, t, s):
+    def forward(self, x, t, s, feat):
         """
         x: (N, latent_dim)
         t: (N, style_dim)
@@ -107,8 +110,9 @@ class ResMLP(nn.Module):
             out = self.act((m(out) + out)*self.scale)
 
         # out = self.inject(torch.cat([out, t, s], -1))
-        # for m in self.mid2:
-        #     out = self.act((m(self.act1(out)) + out)*self.scale)
+        out = self.inject(out, torch.cat([t, s], -1))
+        for m in self.mid2:
+            out = self.act((m(self.act1(out)) + out)*self.scale)
 
         out, occ = self.end(out).split([3, 1], dim=-1)
         occ = torch.sigmoid(occ)
@@ -145,7 +149,7 @@ class MLP(nn.Module):
 class DeformationModel(nn.Module):
     # Map (x, y, z, t0, t1) to (x', y', z', ...)
     
-    def __init__(self, n_dim=128, n_layer=4, n_emb_pos=6, n_emb_time=4):
+    def __init__(self, n_dim=64, n_layer=4, n_emb_pos=6, n_emb_time=4):
         super().__init__()
         self.emb_time = 32
         self.ch_pos = n_emb_pos*3*2
@@ -187,28 +191,33 @@ class DeformationModel(nn.Module):
         ret[..., 1::2] = torch.cos(xx[..., 1::2])
         return ret
 
-    def forward(self, tar_time, src_time, x, is_loss=False):
+    def forward(self, tar_time, src_time, x, feat, is_loss=False, time_max=-1):
         # TODO: DeformationModel
         ''' 
         tar_time: scalar [1]
         scr_time: [1, N_sources]
         x: [N_rays, N_samples, 3]
+        feat: [N_sources, n_dim]
         input: [N_sources, N_rays, N_samples, 5(tars, srcs, x)]
         output: [N_sources, N_rays, N_samples, 3]
         '''
         original_shape = x.shape[:2]
         N_sources = src_time.size(1)
         x = x.cuda()
+        feat = feat.reshape(-1, 1, 1, 256).repeat((1, *original_shape, 1)).reshape(-1, 256)
         xx = x.repeat((N_sources, 1, 1, 1)) # [N_sources, N_rays, N_samples, 3]
         out_shape = (N_sources, *original_shape) # (N_sources, N_rays, N_samples)
         # tar = torch.full((*out_shape, 1), tar_time.item(), device='cuda')  # [N_sources, N_rays, N_samples, 1]
-        tar = self.pos_enc(tar_time.float().reshape(1, 1).cuda(), self.coef_time).repeat(out_shape+(1, )).reshape(-1, self.ch_time)
+        tar_time = tar_time.float().reshape(1, 1).cuda()
+        tar = self.pos_enc(tar_time, self.coef_time).repeat(out_shape+(1, )).reshape(-1, self.ch_time)
+        # tar_time = tar_time.repeat(out_shape+(1, )).reshape(-1, 1)
+
+        src_time = src_time.reshape(-1, 1).cuda()
         src = torch.repeat_interleave(
-            self.pos_enc(src_time.reshape(-1, 1).cuda(), self.coef_time)
+            self.pos_enc(src_time, self.coef_time)
             , original_shape[0]*original_shape[1], 0)
-        
+        # src_time = torch.repeat_interleave(src_time, original_shape[0]*original_shape[1], 0)
         # src = src.reshape(*out_shape, 1)
-        
 
         # out
         # tar = self.pos_enc(tar.reshape(-1, 1), self.coef_time)
@@ -219,58 +228,64 @@ class DeformationModel(nn.Module):
         # src = self.emb_time_net(src)
         x_emb = self.pos_enc(x, self.coef_pos).repeat((N_sources, 1, 1, 1)).reshape(-1, self.ch_pos)
         # x_emb = xx.reshape(-1, 3)
-        dx, occ = self.deform(x_emb, tar, src)
+        dx, occ = self.deform(x_emb, tar, src, feat)
         
-        dx = dx.reshape(*out_shape, 3)
-        occ = occ.reshape(*out_shape, 1)
-        ret = xx+dx
+        ret_occ = occ.reshape(*out_shape, 1)
+        occ = occ.squeeze(-1)
+        ret = xx+dx.reshape(*out_shape, 3)
         if is_loss:            
             # =============== Indentity loss
             ret_emb = self.pos_enc(ret.reshape(-1, 3), self.coef_pos)
             # ret_emb = ret.reshape(-1, 3)
-            di0, occ0 = self.deform(x_emb, tar, tar)
+            di0, occ0 = self.deform(x_emb, tar, tar, feat)
             # di0 = self.deform(xx.reshape(-1, 3), tar, tar)
             # di1 = torch.cat([src, src, ret_emb], -1)
             # di1, occ1 = self.deform(ret_emb, src, src)
             
             # loss_i = (torch.norm(di0, dim=-1)).mean() + (torch.norm(di1, dim=-1)).mean() \
             #     + torch.norm(occ0-1).sum() + torch.norm(occ1-1).sum()
-            loss_i = (torch.norm(di0, dim=-1)).mean() + torch.norm(occ0-1).mean()
-            # loss_i = (torch.norm(di0, dim=-1)).mean()
+            # loss_i = (torch.norm(di0, dim=-1)).mean() + torch.norm(occ0-1).mean()
+            loss_i = (torch.norm(di0, dim=-1)).mean()
 
             # =============== bidirectional loss
-            # dx_ = torch.cat([src, tar, ret_emb], -1)
-            dx_, occ_ = self.deform(ret_emb, src, tar)
-            dx_ = dx_.reshape(*out_shape, 3)+dx
-            occ_ = occ_.reshape(*out_shape, 1)
-            loss_bi = (occ.squeeze(-1)*torch.norm(dx+dx_, p=1, dim=-1)).mean()
-            # loss_bi = (torch.norm(dx+dx_, dim=-1)).mean()
+            dx_, occ_ = self.deform(ret_emb, src, tar, feat)
+            # occ_ = occ_.reshape(*out_shape, 1)
+            # loss_bi = (occ*torch.norm(dx+dx_, p=2, dim=-1)).mean()
+            loss_bi = (torch.norm(dx+dx_, dim=-1)).mean()
             
+            # =============== time L1 smooth regularization
+            # tar_next_time = tar_time + (2./time_max)
+            # tar_next = self.pos_enc(tar_next_time, self.coef_time).repeat(out_shape+(1, )).reshape(-1, self.ch_time)
+            # dx_next, occ_ = self.deform(x_emb, tar_next, src)
+            # loss_next = (occ*torch.norm(dx-dx_next, p=1, dim=-1)).mean()
+
             # =============== L1 smooth regularization
-            smooth = torch.norm(dx, p=1, dim=-1).mean() + torch.norm(dx_, p=1, dim=-1).mean()
+            # smooth = torch.norm(dx, p=1, dim=-1).mean() + torch.norm(dx_, p=1, dim=-1).mean()
             # smooth = self.crit_smooth(dx, torch.zeros_like(dx, device='cuda')) + self.crit_smooth(dx_, torch.zeros_like(dx_, device='cuda'))
 
             # =============== Neighbor L1 smooth regularization
             rd = torch.randn_like(xx, device='cuda')
             nb_x = self.pos_enc(rd + xx, self.coef_pos).reshape(-1, self.ch_pos)
             # nb_x = xx.reshape(-1, 3)
-            dx_nb, occ_ = self.deform(nb_x, tar, src)
-            dist = torch.exp(-2*torch.norm(rd, dim=-1))
-            smooth_nb = (occ.squeeze(-1)*torch.norm(dx_nb.reshape(*out_shape, 3)-dx, p=1, dim=-1)*
+            dx_nb, occ_ = self.deform(nb_x, tar, src, feat)
+            dist = torch.exp(-2*torch.norm(rd.reshape(-1, 3), dim=-1))
+            smooth_nb = (occ*torch.norm(dx_nb-dx, p=1, dim=-1)*
                 dist).sum()/dist.sum()
             
             # =============== non-trivial disocclusion
-            non_trivial = torch.norm(occ-1, p=1, dim=-1).mean() + torch.norm(occ0-1, p=1, dim=-1).mean()
+            # non_trivial = torch.norm(occ-1, p=1, dim=-1).mean() + torch.norm(occ0-1, p=1, dim=-1).mean()
+            # non_trivial =(occ-1).abs().mean() + (occ0-1).abs().mean()
             
             # =============== return
             # return ret, 0, (loss_bi*0.1 + loss_i)
             # print(loss_bi , loss_i , non_trivial , smooth, smooth_nb)
             # assert False
             # return ret, occ, (loss_bi + loss_i*0.01 + smooth_nb*10)
-            return ret, occ, (loss_bi + loss_i*0.01 + non_trivial + smooth + smooth_nb*10)
+            return ret, ret_occ, (loss_bi + loss_i*0.01 + smooth_nb)
+            # return ret, occ, (loss_bi + loss_i*0.01 + non_trivial + smooth + smooth_nb*10)
             # return ret, occ, 0.
 
-        return ret, occ
+        return ret, ret_occ
 
     def forward_(self, tar_time, src_time, x, is_loss=False):
         # TODO: DeformationModel
@@ -577,7 +592,7 @@ class IBRNet(nn.Module):
 
 if __name__ == '__main__':
     a = DeformationModel()
-    a.load_state_dict(torch.load('/home/csvt32745/IBRNet/out/finetune_llff/model_265000_deform.pth'))
+    a.load_state_dict(torch.load('/home/csvt32745/IBRNet/out/finetune_llff/model_262500_deform.pth'))
 
     b = DeformationModel() 
     b.load_state_dict(torch.load('/home/csvt32745/IBRNet/out/finetune_llff/model_260000_deform.pth'))

@@ -55,7 +55,12 @@ class LLFFRenderDataset(Dataset):
 
         for i, scene in enumerate(scenes):
             scene_path = os.path.join(self.folder_path, scene)
-            _, poses, bds, render_poses, i_test, rgb_files, time_indices, time_max = load_llff_data(scene_path, load_imgs=False, factor=8)
+            # "fixed_time": Time is set to 0 
+            # "fixed_pose": Pose is set to poses_avg(poses)
+            # others (None): Both time and pose are moved
+            _, poses, bds, render_poses, i_test, rgb_files, time_indices, render_time, time_max = load_llff_data(
+                scene_path, load_imgs=False, factor=8, pose_path=None, N_views=120)
+
             near_depth = np.min(bds)
             far_depth = np.max(bds)
             intrinsics, c2w_mats = batch_parse_llff_poses(poses)
@@ -79,12 +84,13 @@ class LLFFRenderDataset(Dataset):
             # num_render = len(time_indices)*2
 
 
-            self.render_time_indices.extend(np.array(time_indices).repeat(num_render//len(time_indices))[:num_render].tolist())
+            # self.render_time_indices.extend(np.array(time_indices).repeat(num_render//len(time_indices))[:num_render].tolist())
             # self.render_time_indices.extend([9.]*num_render)
+            self.render_time_indices.extend(render_time)
             print(self.render_time_indices)
             # FIXME
-            self.render_intrinsics.extend([intrinsics_ for intrinsics_ in render_intrinsics])
-            self.render_poses.extend([c2w_mat for c2w_mat in render_c2w_mats])
+            self.render_intrinsics.extend([intrinsics_ for intrinsics_ in render_intrinsics[:num_render]])
+            self.render_poses.extend([c2w_mat for c2w_mat in render_c2w_mats[:num_render]])
 
             # self.render_intrinsics.extend([intrinsics[0]]*num_render)
             # self.render_poses.extend([c2w_mats[0]]*num_render)

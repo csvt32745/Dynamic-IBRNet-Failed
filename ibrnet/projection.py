@@ -173,7 +173,6 @@ class Projector():
 
         # compute the projection of the query points to each reference image
         pixel_locations, mask_in_front = self.compute_projections_respectively(deformed_xyz, train_cameras)
-        # print(pixel_locations[0])
         normalized_pixel_locations = self.normalize(pixel_locations, h, w)   # [n_views, n_rays, n_samples, 2]
         
         # rgb sampling

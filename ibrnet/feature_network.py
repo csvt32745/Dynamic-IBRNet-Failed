@@ -248,7 +248,6 @@ class ResUNet(nn.Module):
         x1 = self.layer1(x)
         x2 = self.layer2(x1)
         x3 = self.layer3(x2)
-
         x = self.upconv3(x3)
         x = self.skipconnect(x2, x)
         x = self.iconv3(x)
@@ -265,4 +264,5 @@ class ResUNet(nn.Module):
         else:
             x_coarse = x_out[:, :self.coarse_out_ch, :]
             x_fine = x_out[:, -self.fine_out_ch:, :]
-        return x_coarse, x_fine
+        # print(x3.reshape(*x3.shape[:2], -1).max(dim=2).values.shape)
+        return x_coarse, x_fine, x3.reshape(*x3.shape[:2], -1).max(dim=-1).values

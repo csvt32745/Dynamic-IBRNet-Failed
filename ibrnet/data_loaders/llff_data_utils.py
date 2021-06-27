@@ -290,8 +290,9 @@ def spherify_poses(poses, bds):
 
 
 def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75,
-                   spherify=False, path_zflat=False, load_imgs=True):
+                   spherify=False, path_zflat=False, load_imgs=True, pose_path=None, N_views=120):
     out = _load_data(basedir, factor=factor, load_imgs=load_imgs)  # factor=8 downsamples original imgs by 8x
+    print(pose_path, N_views)
     if out is None:
         return
     else:
@@ -344,9 +345,9 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75,
         zdelta = close_depth * .2
         tt = poses[:, :3, 3]  # ptstocam(poses[:3,3,:].T, c2w).T
         # FIXME: rads too large?
-        rads = np.percentile(np.abs(tt), 90, 0)*0.1
+        rads = np.percentile(np.abs(tt), 90, 0)
         # rads = (np.abs(tt-c2w[np.newaxis, :3, 3]).mean(0)*0.5).tolist()
-        # rads = [.5]*3
+        rads = [.5]*3
         # print(rads)
         
 
@@ -362,7 +363,17 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75,
             N_views /= 2
 
         # Generate poses for spiral path
-        render_poses = render_path_spiral(c2w_path, up, rads, focal, zdelta, zrate=.5, rots=N_rots, N=N_views)
+        if pose_path == "fixed_time":
+            render_poses = render_path_spiral(c2w_path, up, rads, focal, zdelta, zrate=.5, rots=N_rots, N=N_views)
+            render_time = [0 for i in range(N_views)]
+        elif pose_path == "fixed_pose":
+            render_poses = [c2w_path for i in range(N_views)]
+            # render_time = [float(i) * time_max / N_views for i in range(N_views)]
+            render_time = np.array(time_indices).repeat(N_views//len(time_indices))[:N_views].tolist()
+        else:
+            render_poses = render_path_spiral(c2w_path, up, rads, focal, zdelta, zrate=.5, rots=N_rots, N=N_views)
+            # render_time = [float(i) * time_max / N_views for i in range(N_views)]
+            render_time = np.array(time_indices).repeat(N_views//len(time_indices))[:N_views].tolist()
 
     render_poses = np.array(render_poses).astype(np.float32)
 
@@ -375,7 +386,7 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75,
     # print('HOLDOUT view is', i_test)
     poses = poses.astype(np.float32)
 
-    return images, poses, bds, render_poses, i_test, imgfiles, time_indices, time_max
+    return images, poses, bds, render_poses, i_test, imgfiles, time_indices, render_time, time_max
 
 
 if __name__ == '__main__':

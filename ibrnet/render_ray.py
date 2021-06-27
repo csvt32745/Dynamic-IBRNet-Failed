@@ -14,6 +14,7 @@
 
 
 import torch
+from torch.nn import functional as F
 import numpy as np
 from collections import OrderedDict
 
@@ -191,6 +192,8 @@ def render_rays(ray_batch,
     ret = {'outputs_coarse': None,
            'outputs_fine': None}
 
+    
+
     # pts: [N_rays, N_samples, 3]
     # z_vals: [N_rays, N_samples]
     pts, z_vals = sample_along_camera_ray(ray_o=ray_batch['ray_o'],
@@ -200,9 +203,9 @@ def render_rays(ray_batch,
 
     N_rays, N_samples = pts.shape[:2]
     if return_loss:
-        deformed_pts, occ, loss_d = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, is_loss=True)
+        deformed_pts, occ, loss_d = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, featmaps[2], is_loss=True)
     else:
-        deformed_pts, occ = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, is_loss=False)
+        deformed_pts, occ = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, featmaps[2], is_loss=False)
     
     # FIXME: occ
     occ = occ.permute([1, 2, 0, 3])
@@ -218,6 +221,9 @@ def render_rays(ray_batch,
         rgb_feat, ray_diff, mask, pix_coor = out
         # flow_mask = (mask.float().sum(dim=1) > 4).squeeze(2).permute(1, 0) # [n_views, n_rays, 1, 1]
         # flow_mask = (mask.float().sum(dim=1) > 4).permute(1, 0, 2).unsqueeze(-1) # [n_views, n_rays, 1, 1]
+        
+        time_dif = ((ray_batch['src_time_indices'].reshape(-1)-ray_batch['time_index'][0])**2).reshape(-1, 1, 1)
+        time_dif = F.softmax(-time_dif-1e-6, dim=0).cuda() / (pix_coor.shape[1]*pix_coor.shape[2])
         flow_mask = mask.permute(2, 0, 1, 3)
         flow_num = flow_mask.sum()
         if flow_num < 1:
@@ -232,10 +238,10 @@ def render_rays(ray_batch,
             # print(ray_batch['optical_flows'][0, 0:10, 0])
             # print(pix_coor[0, 0:10, 0])
             # print(flow_mask[0, 0:10, 0])
-            loss_flow = torch.norm(
+            loss_flow = (time_dif*torch.norm(
                 (ray_batch['uv'].reshape(1, -1, 1, 2) + ray_batch['optical_flows'] - pix_coor),
-                    dim=-1
-                ).mean()
+                    dim=-1, p=1
+                )).sum()
             assert not torch.isnan(loss_flow).any(), loss_flow
     else:
         rgb_feat, ray_diff, mask = out
@@ -282,9 +288,9 @@ def render_rays(ray_batch,
         pts = z_vals.unsqueeze(2) * viewdirs + ray_o  # [N_rays, N_samples + N_importance, 3]
         
         if return_loss:
-            deformed_pts, occ, loss_d = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, is_loss=True)
+            deformed_pts, occ, loss_d = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, featmaps[2], is_loss=True)
         else:
-            deformed_pts, occ = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, is_loss=False)
+            deformed_pts, occ = model.deform_net(ray_batch['time_index'], ray_batch['src_time_indices'], pts, featmaps[2], is_loss=False)
         # FIXME: OCC
         occ = occ.permute([1, 2, 0, 3])
 
@@ -311,10 +317,10 @@ def render_rays(ray_batch,
                 # print(ray_batch['optical_flows'].shape, ray_batch['uv'].reshape(1, -1, 1, 2).shape, pix_coor.shape)
                 # print((ray_batch['optical_flows'].cuda() + ray_batch['uv'].cuda().reshape(1, -1, 1, 2) - pix_coor).shape)
                 # assert False
-                loss_flow = torch.norm(
-                    (ray_batch['uv'].reshape(1, -1, 1, 2) + ray_batch['optical_flows'] - pix_coor),
-                        p=1, dim=-1
-                    ).mean()
+                loss_flow = (time_dif*torch.norm(
+                (ray_batch['uv'].reshape(1, -1, 1, 2) + ray_batch['optical_flows'] - pix_coor),
+                    dim=-1, p=1
+                )).sum()
                 assert not torch.isnan(loss_flow).any(), loss_flow
         else:
             rgb_feat_sampled, ray_diff, mask = out

@@ -1,7 +1,8 @@
 ### INPUT
 expname = eval_llff
 rootdir = /home/csvt32745/IBRNet/  # REPLACE THIS with YOUR PATH.
-ckpt_path = /home/csvt32745/IBRNet/out/finetune_llff/model_265000.pth
+ckpt_path = /home/csvt32745/IBRNet/out/finetune_llff/model_305000.pth
+#ckpt_path = /home/csvt32745/IBRNet/out/finetune_llff/jp/model_282500.pth
 distributed = False
 
 ## dataset

@@ -134,6 +134,7 @@ def train(args):
             
             ray_batch['src_time_indices'] = train_data['src_time_indices']
             ray_batch['time_index'] = train_data['time_index']
+            ray_batch['time_max'] = train_data['time_max']
             flows = train_data['optical_flows'][0].reshape(train_data['optical_flows'].shape[1], -1, 2) # (views, W*H, 2)
             ray_batch['optical_flows'] = flows[:, ray_batch['selected_inds']].unsqueeze(2).cuda() # (views, rays, 1, 2)
             
@@ -211,7 +212,8 @@ def train(args):
                     val_data = next(val_loader_iterator)
                     time_dict = {
                         'src_time_indices': val_data['src_time_indices'],
-                        'time_index': val_data['time_index']
+                        'time_index': val_data['time_index'],
+                        'time_max': val_data['time_max']
                     }
                     
                     tmp_ray_sampler = RaySamplerSingleImage(val_data, device, render_stride=args.render_stride)
@@ -224,7 +226,8 @@ def train(args):
                     print('Logging current training view...')
                     time_dict = {
                         'src_time_indices': train_data['src_time_indices'],
-                        'time_index': train_data['time_index']
+                        'time_index': train_data['time_index'],
+                        'time_max': train_data['time_max'],
                     }
                     tmp_ray_train_sampler = RaySamplerSingleImage(train_data, device,
                                                                   render_stride=1)
