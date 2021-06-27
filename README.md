@@ -19,7 +19,9 @@ to run the code.
       ├──(Your images with frame index#) #.jpg/.png
 ```
 The Preprocessing is refered to LLFF: https://github.com/Fyusion/LLFF#1-recover-camera-poses \
-In the root folder, execute `sh gen_pose.sh <dataset_path>` \
+In the root folder, execute `sh gen_pose.sh <dataset_path>` 
+
+e.g.
 ```
 sh gen_pose.sh ~/IBRNet/data/<scene_name>
 ```
