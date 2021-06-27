@@ -7,6 +7,8 @@ distributed = False
 
 ## dataset
 eval_dataset = nvidia_data_full
+
+# Edit to change scenes
 eval_scenes = nvidia_data_full/Jumping
 #eval_scenes = nvidia_data_full/Balloon1-2
 #eval_scenes = nvidia_data_full/Umbrella

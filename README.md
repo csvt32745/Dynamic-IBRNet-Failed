@@ -11,13 +11,18 @@ Besides python package, you will need
 
 to run the code.
 
-## Datasets Preprocessing
+## Datasets
 ```
 ├──data/
   ├──<scene_name>/
     ├──images/
       ├──(Your images with frame index#) #.jpg/.png
 ```
+The dynamic scene data is the same as NSFF
+- https://github.com/zhengqili/Neural-Scene-Flow-Fields
+- https://drive.google.com/file/d/1cjBgF61D16IPeW1V_rL2JIRKJP7S3c6_/view?usp=sharing
+
+### Preprocessing
 The Preprocessing is refered to LLFF: https://github.com/Fyusion/LLFF#1-recover-camera-poses \
 In the root folder, execute `sh gen_pose.sh <dataset_path>` 
 
