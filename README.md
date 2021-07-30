@@ -1,4 +1,4 @@
-# Dynamic Novel View Synthesis
+# Dynamic Novel View Synthesis (Failed result)
 
 ## Dependencies
 
